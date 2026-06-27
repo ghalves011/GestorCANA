@@ -186,12 +186,11 @@ public class TelaSubstituicaoView extends JFrame {
                 br.com.cana.model.Jogador jModel = jogadorService.buscarPorNomeOuApelido(nomeAtrasado);
 
                 if (jModel != null) {
-                    // 🎯 VALIDAÇÃO FINANCEIRA: Verifica a flag vinda do seu DAO
-                    if (!jModel.isMensalidadeEmDia()) {
-                        JOptionPane.showMessageDialog(this,
-                                "O jogador '" + nomeAtrasado
-                                        + "' possui pendências financeiras e está impedido de jogar!",
-                                "Erro Financeiro", JOptionPane.ERROR_MESSAGE);
+                    // 🎯 VALIDAÇÃO REORGANIZADA: Utiliza o método de substituição que ignora o
+                    // financeiro
+                    String msgRestricao = partidaService.validarRestricaoParaSubstituicao(nomeAtrasado);
+                    if (msgRestricao != null) {
+                        JOptionPane.showMessageDialog(this, msgRestricao, "Restrição", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
                 }
