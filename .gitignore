@@ -1,0 +1,13 @@
+# Pastas de compilados (lixo do Java)
+bin/
+build/
+.settings/
+.metadata/
+.project
+.classpath
+.vscode/
+futebol.db
+
+# Arquivos temporários do sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="futebol.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="4826"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="JogadorPartida" custom_title="0" dock_id="1" table="4,14:mainJogadorPartida"/><dock_state state="000000ff00000000fd000000010000000200000427000002aefc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000004270000011e00ffffff0000025e0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="Contribuicao" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="29"/><column index="2" value="71"/><column index="3" value="31"/><column index="4" value="29"/><column index="5" value="36"/><column index="6" value="96"/><column index="7" value="36"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Evento" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="29"/><column index="2" value="30"/><column index="3" value="71"/><column index="4" value="67"/><column index="5" value="53"/><column index="6" value="61"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Jogador" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="29"/><column index="2" value="39"/><column index="3" value="29"/><column index="4" value="29"/><column index="5" value="60"/><column index="6" value="29"/><column index="7" value="69"/><column index="8" value="51"/><column index="9" value="42"/><column index="10" value="45"/><column index="11" value="46"/><column index="12" value="54"/><column index="13" value="119"/><column index="14" value="50"/><column index="15" value="35"/><column index="16" value="83"/><column index="17" value="41"/><column index="18" value="34"/><column index="19" value="79"/><column index="20" value="108"/><column index="21" value="77"/><column index="22" value="127"/><column index="23" value="84"/><column index="24" value="92"/><column index="25" value="114"/><column index="26" value="73"/><column index="27" value="71"/><column index="28" value="106"/><column index="29" value="113"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="JogadorPartida" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="71"/><column index="2" value="67"/><column index="3" value="33"/><column index="4" value="43"/><column index="5" value="46"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">-- Tabela de Jogador
+CREATE TABLE Jogador (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    cpf TEXT,
+    rg TEXT,
+    dataNasc TEXT, -- Formato YYYY-MM-DD
+    cep TEXT,
+    logradouro TEXT,
+    numero TEXT,
+    bairro TEXT,
+    cidade TEXT,
+    estado TEXT,
+    telefone TEXT,
+	telefoneEmergencia TEXT,
+    posicao TEXT,
+    nivel INTEGER,
+    peDominante TEXT,
+    altura REAL,
+    peso REAL,
+    timeAnterior TEXT,
+    tempoExperiencia TEXT,
+    padrinho_id INTEGER, -- Chave estrangeira referenciando outro Jogador
+    grauRelacaoPadrinho TEXT,
+    estaSuspenso INTEGER DEFAULT 0, -- 0 (False), 1 (True)
+    estaAutorizado INTEGER DEFAULT 1,
+    mensalidadeEmDia INTEGER DEFAULT 1,
+    numCamisa INTEGER,
+    golsIniciais INTEGER DEFAULT 0,
+    cAmarelosIniciais INTEGER DEFAULT 0,
+    cVermelhosIniciais INTEGER DEFAULT 0,
+    FOREIGN KEY (padrinho_id) REFERENCES Jogador(id)
+);
+
+-- Tabela de Contribuição (Mensalidade/Taxas)
+CREATE TABLE Contribuicao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jogador_id INTEGER NOT NULL,
+    mes INTEGER,
+    ano INTEGER,
+    pago INTEGER DEFAULT 0, -- 0 (False), 1 (True)
+    dataPagamento TEXT,
+    valor REAL,
+    FOREIGN KEY (jogador_id) REFERENCES Jogador(id)
+);
+
+-- Tabela de Temporada (Para zerar as estatísticas no ano novo)
+CREATE TABLE Temporada (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ano INTEGER UNIQUE NOT NULL
+);
+
+-- Tabela de Partida
+CREATE TABLE Partida (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    temporada_id INTEGER NOT NULL,
+    dataPartida TEXT NOT NULL,
+    golsTimeAzul INTEGER DEFAULT 0,
+    golsTimeVermelho INTEGER DEFAULT 0,
+    sumula TEXT,
+    FOREIGN KEY (temporada_id) REFERENCES Temporada(id)
+);
+
+-- Tabela Associativa: JogadorPartida (Quem jogou em qual time)
+CREATE TABLE JogadorPartida (
+    jogador_id INTEGER NOT NULL,
+    partida_id INTEGER NOT NULL,
+    time TEXT, -- 'Azul' ou 'Vermelho'
+    status TEXT, -- Ex: 'Titular', 'Reserva', 'Lesionado'
+    funcao TEXT, -- Ex: 'Capitão'
+    PRIMARY KEY (jogador_id, partida_id),
+    FOREIGN KEY (jogador_id) REFERENCES Jogador(id),
+    FOREIGN KEY (partida_id) REFERENCES Partida(id)
+);
+
+-- Tabela de Evento (Gols, Cartões, Substituições)
+CREATE TABLE Evento (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL, -- Ex: 'Gol', 'Cartao_Amarelo'
+    jogador_id INTEGER NOT NULL,
+    partida_id INTEGER NOT NULL,
+    corTime TEXT,
+    descricao TEXT,
+    FOREIGN KEY (jogador_id) REFERENCES Jogador(id),
+    FOREIGN KEY (partida_id) REFERENCES Partida(id)
+);</sql><current_tab id="0"/></tab_sql></sqlb_project>
