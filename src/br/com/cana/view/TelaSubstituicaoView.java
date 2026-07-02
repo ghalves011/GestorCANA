@@ -126,21 +126,62 @@ public class TelaSubstituicaoView extends JFrame {
         btnConfirmar.addActionListener(e -> {
             if (mainModelAzul != null) {
                 for (int i = 0; i < modelAzul.getRowCount(); i++) {
-                    String nomeAntigo = mainModelAzul.getValueAt(i, 0).toString();
                     String nomeNovo = modelAzul.getValueAt(i, 0).toString();
-                    if (!nomeAntigo.equals(nomeNovo)) {
-                        mainModelAzul.setValueAt(nomeNovo, i, 0);
-                        String evAtual = mainModelAzul.getValueAt(i, 2).toString();
-                        mainModelAzul.setValueAt(partidaService.registrarSubstituicaoNoEvento(evAtual), i, 2);
+                    if (i >= mainModelAzul.getRowCount()) {
+                        String posReal = "LIN";
+                        if (partidaObjeto != null && partidaObjeto.getListaGeralPresenca() != null) {
+                            for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
+                                String nomeJ = (jp.getJogador().getApelido() != null
+                                        && !jp.getJogador().getApelido().trim().isEmpty())
+                                                ? jp.getJogador().getApelido()
+                                                : jp.getJogador().getNome();
+                                if (nomeJ.equalsIgnoreCase(nomeNovo)) {
+                                    // 🎯 Usa o método que você já criou no seu Service!
+                                    posReal = partidaService.encurtarPosicaoInterna(jp.getJogador().getPosicao());
+                                    break;
+                                }
+                            }
+                        }
+                        mainModelAzul.addRow(new Object[] { nomeNovo, posReal, "" });
+                    } else {
+                        String nomeAntigo = mainModelAzul.getValueAt(i, 0).toString();
+                        if (!nomeAntigo.equals(nomeNovo)) {
+                            mainModelAzul.setValueAt(nomeNovo, i, 0);
+                            if (!nomeAntigo.trim().startsWith("Azul ")) {
+                                String evAtual = mainModelAzul.getValueAt(i, 2).toString();
+                                mainModelAzul.setValueAt(partidaService.registrarSubstituicaoNoEvento(evAtual), i, 2);
+                            }
+                        }
                     }
                 }
                 for (int i = 0; i < modelVermelho.getRowCount(); i++) {
-                    String nomeAntigo = mainModelVermelho.getValueAt(i, 0).toString();
                     String nomeNovo = modelVermelho.getValueAt(i, 0).toString();
-                    if (!nomeAntigo.equals(nomeNovo)) {
-                        mainModelVermelho.setValueAt(nomeNovo, i, 0);
-                        String evAtual = mainModelVermelho.getValueAt(i, 2).toString();
-                        mainModelVermelho.setValueAt(partidaService.registrarSubstituicaoNoEvento(evAtual), i, 2);
+                    if (i >= mainModelVermelho.getRowCount()) {
+                        String posReal = "LIN";
+                        if (partidaObjeto != null && partidaObjeto.getListaGeralPresenca() != null) {
+                            for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
+                                String nomeJ = (jp.getJogador().getApelido() != null
+                                        && !jp.getJogador().getApelido().trim().isEmpty())
+                                                ? jp.getJogador().getApelido()
+                                                : jp.getJogador().getNome();
+                                if (nomeJ.equalsIgnoreCase(nomeNovo)) {
+                                    // 🎯 Usa o método que você já criou no seu Service!
+                                    posReal = partidaService.encurtarPosicaoInterna(jp.getJogador().getPosicao());
+                                    break;
+                                }
+                            }
+                        }
+                        mainModelVermelho.addRow(new Object[] { nomeNovo, posReal, "" });
+                    } else {
+                        String nomeAntigo = mainModelVermelho.getValueAt(i, 0).toString();
+                        if (!nomeAntigo.equals(nomeNovo)) {
+                            mainModelVermelho.setValueAt(nomeNovo, i, 0);
+                            if (!nomeAntigo.trim().startsWith("Vermelho ")) {
+                                String evAtual = mainModelVermelho.getValueAt(i, 2).toString();
+                                mainModelVermelho.setValueAt(partidaService.registrarSubstituicaoNoEvento(evAtual), i,
+                                        2);
+                            }
+                        }
                     }
                 }
             }
@@ -342,13 +383,16 @@ public class TelaSubstituicaoView extends JFrame {
         };
 
         DefaultTableModel alvo = isAzul ? mainModelAzul : mainModelVermelho;
+        int totalAdicionado = 0;
         if (alvo != null) {
             for (int i = 0; i < alvo.getRowCount(); i++) {
                 model.addRow(new Object[] { alvo.getValueAt(i, 0), alvo.getValueAt(i, 1) });
+                totalAdicionado++;
             }
-        } else {
-            for (int i = 1; i <= 11; i++)
-                model.addRow(new Object[] { (isAzul ? "Azul " : "Vermelho ") + i, "" + i, "LIN" });
+        }
+        while (totalAdicionado < 11) {
+            model.addRow(new Object[] { (isAzul ? "Azul " : "Vermelho ") + (totalAdicionado + 1), "LIN" });
+            totalAdicionado++;
         }
 
         if (isAzul) {
@@ -441,9 +485,8 @@ public class TelaSubstituicaoView extends JFrame {
                         if (j != null) {
                             String nomeJ = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido()
                                     : j.getNome();
-                            String posJ = (j.getPosicao() != null && !j.getPosicao().trim().isEmpty()) ? j.getPosicao()
-                                    : "-";
-                            reservasReais.add(nomeJ + " (" + posJ + ")");
+                            String posResumida = partidaService.encurtarPosicaoInterna(j.getPosicao());
+                            reservasReais.add(nomeJ + " (" + posResumida + ")");
                         }
                     }
                 }
@@ -500,6 +543,7 @@ public class TelaSubstituicaoView extends JFrame {
                 JTable tabelaAlvo = (rowAzul >= 0) ? tabelaAzul : (rowVermelho >= 0) ? tabelaVermelho : null;
 
                 if (modelAlvo != null) {
+
                     String msgErro = partidaService.validarRestricaoParaSubstituicao(btnReserva.getText());
                     if (msgErro != null) {
                         JOptionPane.showMessageDialog(this, msgErro, "Restrição", JOptionPane.WARNING_MESSAGE);
@@ -511,20 +555,54 @@ public class TelaSubstituicaoView extends JFrame {
                     String nomeSaindo = modelAlvo.getValueAt(linhaSel, 0).toString();
                     String nomeEntrandoRaw = btnReserva.getText();
 
-                    String[] resultado = partidaService.processarSubstituicaoJogador(
-                            nomeSaindo, nomeEntrandoRaw, modelAlvo.getValueAt(linhaSel, 1).toString());
-
-                    // ⚡ AS LINHAS NOVAS QUE ADICIONAMOS ENTRAM BEM AQUI:
                     String timeAlvo = (rowAzul >= 0) ? "Azul" : "Vermelho";
                     String nomeEntrandoLimpo = partidaService.obterNomeAtivo(nomeEntrandoRaw);
-                    partidaService.atualizarSubstituicaoNaListaPresenca(partidaObjeto, nomeSaindo, nomeEntrandoLimpo,
-                            timeAlvo);
 
-                    // Aplica as alterações visuais na tabela do Swing
-                    modelAlvo.setValueAt(resultado[0], linhaSel, 0);
-                    btnReserva.setText(resultado[1]);
+                    // 🎯 INTERCEPTAÇÃO: Verifica se o sorteio gerou uma linha incompleta genérica
+                    boolean isVagaIncompleta = nomeSaindo.trim().startsWith("Azul ")
+                            || nomeSaindo.trim().startsWith("Vermelho ");
+
+                    if (isVagaIncompleta) {
+                        // 🚀 FLUXO COMPLETAR TIME (Sorteio Incompleto)
+                        if (partidaObjeto != null && partidaObjeto.getListaGeralPresenca() != null) {
+                            for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
+                                String nomeObjeto = (jp.getJogador().getApelido() != null
+                                        && !jp.getJogador().getApelido().trim().isEmpty())
+                                                ? jp.getJogador().getApelido().trim()
+                                                : jp.getJogador().getNome().trim();
+
+                                if (nomeObjeto.equalsIgnoreCase(nomeEntrandoLimpo)) {
+                                    jp.setTime(timeAlvo);
+                                    jp.setStatus("Titular"); // Entra direto como titular, já que a vaga estava vazia!
+
+                                    // Sincroniza a função tática baseada no padrão da sua súmula (Ex: Azul_LIN_10)
+                                    String posSigla = modelAlvo.getValueAt(linhaSel, 1).toString().contains("GOL")
+                                            ? "GOL"
+                                            : "LIN";
+                                    jp.setFuncao(timeAlvo + "_" + posSigla + "_" + (linhaSel + 1));
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Atualiza o JTable local da substituição com o nome limpo do cara (sem gerar o
+                        // " / ")
+                        modelAlvo.setValueAt(nomeEntrandoLimpo, linhaSel, 0);
+
+                    } else {
+                        // 🔄 FLUXO NORMAL (Substituição padrão com bola rolando)
+                        String[] resultado = partidaService.processarSubstituicaoJogador(
+                                nomeSaindo, nomeEntrandoRaw, modelAlvo.getValueAt(linhaSel, 1).toString());
+
+                        partidaService.atualizarSubstituicaoNaListaPresenca(partidaObjeto, nomeSaindo,
+                                nomeEntrandoLimpo, timeAlvo);
+
+                        // Aplica o formato clássico de substituição ("Gui / Lucas") na tabela local
+                        modelAlvo.setValueAt(resultado[0], linhaSel, 0);
+                    }
+
+                    // Reseta os componentes para o próximo clique
                     tabelaAlvo.clearSelection();
-
                     atualizarGridBotoesReservas(painelReservas);
 
                 } else {

@@ -69,21 +69,34 @@ public class ContribuicaoDAO {
     }
 
     public boolean hasPendencias(int jogadorId, LocalDate dataAdmissao) {
-        // 1. Primeiro, pegamos a data atual para comparar com a admissão
+        // 1. Pegamos a data atual e aplicamos a regra do dia 10
         LocalDate hoje = LocalDate.now();
+        int diaAtual = hoje.getDayOfMonth();
         int mesAtual = hoje.getMonthValue();
         int anoAtual = hoje.getYear();
 
-        // 2. Se a data de admissão for nula, assumimos que o jogador é antigo e pode ter pendências
+        // REGRA DO DIA 10: Se ainda não passou do dia 10, o mês atual NÃO está vencido.
+        // Portanto, a cobrança obrigatória vai até o mês anterior!
+        if (diaAtual <= 10) {
+            mesAtual--;
+            if (mesAtual == 0) { // Se for janeiro antes do dia 10, recua para dezembro do ano passado
+                mesAtual = 12;
+                anoAtual--;
+            }
+        }
+
+        // 2. Se a data de admissão for nula, assumimos que o jogador é antigo
         int mesAdmissao = (dataAdmissao != null) ? dataAdmissao.getMonthValue() : mesAtual;
         int anoAdmissao = (dataAdmissao != null) ? dataAdmissao.getYear() : anoAtual;
 
-        // 3. Se o jogador foi admitido depois do mês atual, ele não pode ter pendências
+        // 3. Se o jogador foi admitido depois do limite máximo de cobrança calculado,
+        // ele está zerado
         if (anoAdmissao > anoAtual || (anoAdmissao == anoAtual && mesAdmissao > mesAtual)) {
             return false;
         }
 
-        // 4. Calculamos quantos meses o jogador deveria ter pago desde a admissão até hoje
+        // 4. Calculamos quantos meses o jogador realmente deveria ter pago até o limite
+        // corrigido
         int mesesDeveriaTerPago = 0;
         if (anoAdmissao == anoAtual) {
             mesesDeveriaTerPago = (mesAtual - mesAdmissao) + 1;
@@ -91,17 +104,17 @@ public class ContribuicaoDAO {
             mesesDeveriaTerPago = (12 - mesAdmissao + 1) + ((anoAtual - anoAdmissao - 1) * 12) + mesAtual;
         }
 
-        // 5. Query blindada
+        // 5. Query blindada (permanece igual, mas usando os limites corrigidos)
         String sql = "SELECT COUNT(*) FROM Contribuicao " +
-                     "WHERE jogador_id = ? AND pago = 1 " +
-                     "AND ((ano * 100) + mes) >= ? " +
-                     "AND ((ano * 100) + mes) <= ?";
+                "WHERE jogador_id = ? AND pago = 1 " +
+                "AND ((ano * 100) + mes) >= ? " +
+                "AND ((ano * 100) + mes) <= ?";
 
         int limiteAdmissao = (anoAdmissao * 100) + mesAdmissao;
         int limiteHoje = (anoAtual * 100) + mesAtual;
 
         try (Connection conexao = ConnectionFactory.getConnection();
-             PreparedStatement stmt = conexao.prepareStatement(sql)) {
+                PreparedStatement stmt = conexao.prepareStatement(sql)) {
 
             stmt.setInt(1, jogadorId);
             stmt.setInt(2, limiteAdmissao);
@@ -207,11 +220,12 @@ public class ContribuicaoDAO {
     }
 
     public boolean excluir(int idJogador, int mes, int ano) {
-        // Query para estornar o pagamento, ou seja, marcar como não pago e limpar a data. Não deletamos
+        // Query para estornar o pagamento, ou seja, marcar como não pago e limpar a
+        // data. Não deletamos
         String sql = "UPDATE contribuicao SET pago = 0, dataPagamento = NULL " +
                 "WHERE jogador_id = ? AND mes = ? AND ano = ?";
 
-        try (Connection conn = ConnectionFactory.getConnection(); 
+        try (Connection conn = ConnectionFactory.getConnection();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setInt(1, idJogador);
@@ -220,7 +234,8 @@ public class ContribuicaoDAO {
 
             int linhasAfetadas = stmt.executeUpdate();
 
-            // Se pelo menos uma linha foi atualizada, consideramos que o estorno foi bem-sucedido
+            // Se pelo menos uma linha foi atualizada, consideramos que o estorno foi
+            // bem-sucedido
             return linhasAfetadas > 0;
 
         } catch (SQLException e) {
@@ -233,7 +248,7 @@ public class ContribuicaoDAO {
         // Query super leve que apenas checa se existe a linha
         String sql = "SELECT 1 FROM contribuicao WHERE jogador_id = ? AND mes = ? AND ano = ?";
 
-        try (Connection conn = ConnectionFactory.getConnection(); 
+        try (Connection conn = ConnectionFactory.getConnection();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setInt(1, idJogador);

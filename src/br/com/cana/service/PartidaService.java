@@ -1266,7 +1266,7 @@ public class PartidaService {
         return emojis.toString().trim(); // Retira o espaço sobrando do último emoji
     }
 
-    private String encurtarPosicaoInterna(String posicao) {
+    public String encurtarPosicaoInterna(String posicao) {
         if (posicao == null)
             return "--";
         posicao = posicao.toUpperCase().trim();

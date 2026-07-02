@@ -2,7 +2,7 @@
 <launch4jConfig>
   <dontWrapJar>false</dontWrapJar>
   <headerType>gui</headerType>
-  <jar>C:\Users\USER\Documents\GestorCANA-main\GestorCana.jar</jar>
+  <jar>C:\Users\USER\Documents\GestorCANA-main\GestorCANA.jar</jar>
   <outfile>C:\Users\USER\Documents\GestorCANA-main\GestorCana.exe</outfile>
   <errTitle></errTitle>
   <cmdLine></cmdLine>
