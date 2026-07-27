@@ -322,63 +322,47 @@ public class TelaPartidaLiveView extends JFrame {
         };
 
         if (jogadores != null) {
-            boolean jaTemGoleiroNoTime = false; // Flag de controle interna do painel
 
-            for (br.com.cana.model.Jogador j : jogadores) {
-                String nomeExibir = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido()
-                        : j.getNome();
+            // 🌟 NOVO LAÇO: Lê direto da ListaGeralPresenca para respeitar a ordem exata da
+            // formação!
+            if (partidaObjeto != null && partidaObjeto.getListaGeralPresenca() != null) {
+                for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
 
-                String posBanco = j.getPosicao() != null ? j.getPosicao().toUpperCase().trim() : "";
-                String posicaoEncurtada = "-";
+                    // Descobre se o jogador da iteração pertence ao painel que estamos desenhando
+                    // (Azul ou Vermelho)
+                    boolean pertenceAoTime = isAzul ? "Azul".equalsIgnoreCase(jp.getTime())
+                            : "Vermelho".equalsIgnoreCase(jp.getTime());
 
-                switch (posBanco) {
-                    case "GOLEIRO":
-                        // Se o time já tem um goleiro oficial no campo, o segundo vira jogador de linha
-                        // ("LIN")
-                        if (!jaTemGoleiroNoTime) {
-                            posicaoEncurtada = "GOL";
-                            jaTemGoleiroNoTime = true;
-                        } else {
-                            posicaoEncurtada = "LIN";
+                    // Só desenha se for do time certo e for Titular
+                    if (pertenceAoTime && "Titular".equalsIgnoreCase(jp.getStatus())) {
+
+                        br.com.cana.model.Jogador j = jp.getJogador();
+                        String nomeExibir = (j.getApelido() != null && !j.getApelido().trim().isEmpty())
+                                ? j.getApelido()
+                                : j.getNome();
+
+                        // 1. Extrai a sigla da vaga FIXA (Ex: "Vermelho_MEI_8" -> "MEI")
+                        String posicaoEncurtada = "LIN";
+                        if (jp.getFuncao() != null && jp.getFuncao().contains("_")) {
+                            String[] partes = jp.getFuncao().split("_");
+                            if (partes.length >= 2) {
+                                posicaoEncurtada = partes[1]; // Pega a sigla (GOL, LAT, ZAG, MEI, ATA)
+                            }
                         }
-                        break;
-                    case "LATERAL":
-                        posicaoEncurtada = "LAT";
-                        break;
-                    case "ZAGUEIRO":
-                        posicaoEncurtada = "ZAG";
-                        break;
-                    case "MEIA":
-                        posicaoEncurtada = "MEI";
-                        break;
-                    case "ATACANTE":
-                        posicaoEncurtada = "ATA";
-                        break;
-                    default:
-                        posicaoEncurtada = posBanco;
-                }
 
-                // RECONSTRUÇÃO HISTÓRICA DE EVENTOS (Gols e Cartões)
-                String eventosReconstruídos = "";
-                if (partidaObjeto.getListaGeralPresenca() != null) {
-                    for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
-                        if (jp.getJogador() != null && jp.getJogador().getId() == j.getId()) {
-                            // Loop para desenhar a quantidade exata de gols marcados
-                            for (int g = 0; g < jp.getGols(); g++)
-                                eventosReconstruídos += "⚽";
-                            // Loop para desenhar os cartões amarelos aplicados
-                            for (int a = 0; a < jp.getCartaoAmarelo(); a++)
-                                eventosReconstruídos += "🟨";
-                            // Loop para desenhar se houve cartão vermelho
-                            for (int v = 0; v < jp.getCartaoVermelho(); v++)
-                                eventosReconstruídos += "🟥";
-                            break;
-                        }
+                        // 2. Reconstrução histórica de eventos (Gols e Cartões)
+                        String eventosReconstruídos = "";
+                        for (int g = 0; g < jp.getGols(); g++)
+                            eventosReconstruídos += "⚽";
+                        for (int a = 0; a < jp.getCartaoAmarelo(); a++)
+                            eventosReconstruídos += "🟨";
+                        for (int v = 0; v < jp.getCartaoVermelho(); v++)
+                            eventosReconstruídos += "🟥";
+
+                        // 3. Adiciona a linha na tabela NA ORDEM EXATA do backend!
+                        model.addRow(new Object[] { nomeExibir, posicaoEncurtada, eventosReconstruídos });
                     }
                 }
-
-                // Modificado para exibir as estatísticas corretas em vez de ""
-                model.addRow(new Object[] { nomeExibir, posicaoEncurtada, eventosReconstruídos });
             }
         }
 
@@ -505,12 +489,6 @@ public class TelaPartidaLiveView extends JFrame {
                     // 🔄 LÓGICA DO CLIQUE CASADO: Intercepta o clique comum (Esquerdo) para fechar
                     // a inversão
                     if (jogadorPendenteTroca != null && SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
-                        if (isAzul == isAzulOrigemTroca) {
-                            jogadorPendenteTroca = null;
-                            JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
-                                    "Inversão manual cancelada (clique feito no mesmo time).");
-                            return;
-                        }
 
                         if (temEventosNaPartida) {
                             JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
@@ -520,30 +498,64 @@ public class TelaPartidaLiveView extends JFrame {
                             return;
                         }
 
-                        // Executa a inversão direta na entidade (Service)
-                        boolean sucesso = service.permutarJogadoresEntreTimesManual(partidaObjeto, jogadorPendenteTroca,
-                                nomeJogador, temEventosNaPartida);
+                        // 🌟 IDENTIFICA O TIPO DE TROCA: Mesmo Time ou Adversário?
+                        boolean isTrocaMesmoTime = (isAzul == isAzulOrigemTroca);
+                        boolean sucesso = false;
+
+                        if (isTrocaMesmoTime) {
+                            // Executa a inversão no mesmo time na entidade (Service)
+                            sucesso = service.inverterPosicaoMesmoTime(partidaObjeto, jogadorPendenteTroca,
+                                    nomeJogador);
+                        } else {
+                            // Executa a inversão com adversário na entidade (Service)
+                            sucesso = service.permutarJogadoresEntreTimesManual(partidaObjeto, jogadorPendenteTroca,
+                                    nomeJogador, temEventosNaPartida);
+                        }
+
                         if (sucesso) {
                             DefaultTableModel modelOrigem = isAzulOrigemTroca ? modelAzul : modelVermelho;
 
-                            // Captura as informações originais da origem (Jogador A)
-                            Object nomeA = modelOrigem.getValueAt(linhaOrigemTroca, 0);
-                            Object numA = modelOrigem.getValueAt(linhaOrigemTroca, 1);
-                            Object posA = modelOrigem.getValueAt(linhaOrigemTroca, 2);
+                            // 🌟 MODO 1: TROCA DE POSIÇÃO NO MESMO TIME
+                            if (isTrocaMesmoTime) {
+                                // Apenas troca as siglas de Posição (Coluna 1) entre as linhas selecionadas
+                                Object posA = modelOrigem.getValueAt(linhaOrigemTroca, 1);
+                                Object posB = model.getValueAt(row, 1);
 
-                            // Seta os dados do Jogador B na linha da Origem A
-                            modelOrigem.setValueAt(model.getValueAt(row, 0), linhaOrigemTroca, 0);
-                            modelOrigem.setValueAt(model.getValueAt(row, 1), linhaOrigemTroca, 1);
-                            modelOrigem.setValueAt(model.getValueAt(row, 2), linhaOrigemTroca, 2);
+                                modelOrigem.setValueAt(posB, linhaOrigemTroca, 1);
+                                model.setValueAt(posA, row, 1);
 
-                            // Seta os dados originais do Jogador A na linha do Destino B
-                            model.setValueAt(nomeA, row, 0);
-                            model.setValueAt(numA, row, 1);
-                            model.setValueAt(posA, row, 2);
+                                // Reordena o time taticamente
+                                reordenarTabelaTaticamente(modelOrigem);
+                                JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
+                                        "Posições invertidas no mesmo time com sucesso!");
+                            }
+                            // 🌟 MODO 2: TROCA DE JOGADOR COM ADVERSÁRIO (Ajuste de Cadeira/Vaga)
+                            else {
+                                // 1. Pega apenas os NOMES dos dois jogadores
+                                Object nomeA = modelOrigem.getValueAt(linhaOrigemTroca, 0); // Nome do Jogador Azul
+                                Object nomeB = model.getValueAt(row, 0); // Nome do Jogador Vermelho
 
+                                // 2. Pega apenas os EVENTOS (gols/cartões) dos dois jogadores
+                                Object eventosA = modelOrigem.getValueAt(linhaOrigemTroca, 2);
+                                Object eventosB = model.getValueAt(row, 2);
+
+                                // 3. TROCA APENAS OS NOMES E EVENTOS!
+                                // As Posições (Coluna 1) das cadeiras não se mexem!
+                                modelOrigem.setValueAt(nomeB, linhaOrigemTroca, 0); // Jogador B assume a cadeira no
+                                                                                    // Time Azul
+                                modelOrigem.setValueAt(eventosB, linhaOrigemTroca, 2);
+
+                                model.setValueAt(nomeA, row, 0); // Jogador A assume a cadeira no Time Vermelho
+                                model.setValueAt(eventosA, row, 2);
+
+                                JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
+                                        "Inversão com adversário realizada! O jogador assumiu a posição tática da vaga.");
+                            }
+                        } else {
                             JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
-                                    "Inversão realizada com sucesso mantendo as linhas!");
+                                    "Não foi possível realizar a inversão.", "Erro", JOptionPane.ERROR_MESSAGE);
                         }
+
                         jogadorPendenteTroca = null; // Reseta o fluxo
                         return; // Interrompe para não abrir o menu popup de gols/cartões
                     }
@@ -746,6 +758,20 @@ public class TelaPartidaLiveView extends JFrame {
                                 }
                             }
                         }
+
+                        // --- NOVO ITEM: INVERSÃO NO MESMO TIME ---
+                        JMenuItem itemInverterMesmoTime = new JMenuItem("🔁 Inverter Posição no Mesmo Time...");
+                        itemInverterMesmoTime.setEnabled(!temEventosNaPartida);
+                        itemInverterMesmoTime.addActionListener(al -> {
+                            jogadorPendenteTroca = nomeJogador;
+                            isAzulOrigemTroca = isAzul;
+                            linhaOrigemTroca = row;
+                            JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
+                                    "Inversão ativada para: " + nomeJogador
+                                            + "\nFeche este menu e dê um clique comum (esquerdo) no jogador do MESMO TIME.");
+                        });
+                        menu.add(itemInverterMesmoTime);
+                        // ------------------------------------------
 
                         // --- ITEM DO POPUP: ATIVA O MODO DE INVERSÃO ---
                         JMenuItem itemTrocarTime = new JMenuItem("🔄 Inverter Posição com Adversário...");

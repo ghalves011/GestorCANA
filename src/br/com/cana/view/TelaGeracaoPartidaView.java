@@ -59,7 +59,7 @@ public class TelaGeracaoPartidaView extends JFrame {
         add(txtData);
 
         // --- SELEÇÃO DE FORMAÇÕES ---
-        String[] formacoes = { "4-4-2", "4-3-3", "3-5-2", "4-2-3-1" };
+        String[] formacoes = { "4-4-2", "4-3-3", "3-5-2", "4-5-1", "3-4-3", "5-3-2" };
 
         JLabel lblFormA = new JLabel("Formação Time AZUL:");
         lblFormA.setBounds(50, 240, 150, 28);
@@ -217,7 +217,7 @@ public class TelaGeracaoPartidaView extends JFrame {
 
             // 🔥 O Service agora cuida do sorteio E popula a ListaGeralPresenca da várzea
             // corretamente!
-            partidaService.sortearTimesTatico(novaPartida, jogadoresOrdenados, formA);
+            partidaService.sortearTimesTatico(novaPartida, jogadoresOrdenados, formA, formB);
 
             // 5. ABRE A TELA LIVE (Antigo Passo 6)
             TelaPartidaLiveView telaLive = new TelaPartidaLiveView(novaPartida);

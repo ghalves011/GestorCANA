@@ -71,6 +71,7 @@ public class TelaSubstituicaoView extends JFrame {
         scrollReservas.setBorder(null);
         scrollReservas.getViewport().setBackground(ImagemUtil.COR_FUNDO);
         scrollReservas.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollReservas.getVerticalScrollBar().setUnitIncrement(16); // 🚀 VELOCIDADE AQUI
         add(scrollReservas);
 
         // --- ARBITRAGEM OPERACIONAL ---
@@ -189,69 +190,77 @@ public class TelaSubstituicaoView extends JFrame {
         });
         add(btnConfirmar);
 
-        // Código do botão atrasado (Mantido inline para evitar mexer no escopo de fora)
         btnAdicionarAtrasado.addActionListener(al -> {
-            // Busca a lista de atletas ativos que ainda não estão no racha, já ordenados
-            // por posição pelo Service
-            List<br.com.cana.model.Jogador> disponiveis = partidaService
-                    .obterAtrasadosDisponiveisOrdenados(partidaObjeto);
+            List<br.com.cana.model.Jogador> disponiveis = partidaService.obterAtrasadosDisponiveisOrdenados(partidaObjeto);
 
             if (disponiveis.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Todos os jogadores ativos já estão relacionados nesta partida!");
                 return;
             }
 
-            // Monta o JComboBox organizadinho por posições
-            JComboBox<String> comboAtrasados = new JComboBox<>();
+            // 🌟 CRIANDO O COMPONENTE DE BUSCA + LISTA
+            JPanel panelModal = new JPanel(new BorderLayout(5, 5));
+            JTextField txtBusca = new JTextField();
+            txtBusca.putClientProperty("JTextField.placeholderText", "🔍 Filtrar...");
+            
+            DefaultListModel<String> listModel = new DefaultListModel<>();
             for (br.com.cana.model.Jogador j : disponiveis) {
-                String nomeExibicao = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido()
-                        : j.getNome();
-                comboAtrasados.addItem("[" + (j.getPosicao() != null ? j.getPosicao().toUpperCase().trim() : "-") + "] "
-                        + nomeExibicao);
+                String nome = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido() : j.getNome();
+                listModel.addElement("[" + (j.getPosicao() != null ? j.getPosicao().toUpperCase().trim() : "-") + "] " + nome);
             }
+            
+            JList<String> listAtrasados = new JList<>(listModel);
+            listAtrasados.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            JScrollPane scrollList = new JScrollPane(listAtrasados);
+            scrollList.setPreferredSize(new Dimension(250, 150));
+            scrollList.getVerticalScrollBar().setUnitIncrement(16); // Scroll rápido também aqui
 
-            // Abre o modal de escolha do jogador da várzea
-            int result = JOptionPane.showConfirmDialog(this, comboAtrasados, "Jogador Atrasado",
-                    JOptionPane.OK_CANCEL_OPTION);
+            // Filtro em tempo real
+            txtBusca.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                private void filtrar() {
+                    listModel.clear();
+                    String termo = txtBusca.getText();
+                    for (br.com.cana.model.Jogador j : disponiveis) {
+                        String nome = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido() : j.getNome();
+                        String item = "[" + (j.getPosicao() != null ? j.getPosicao().toUpperCase().trim() : "-") + "] " + nome;
+                        if (partidaService.filtrarJogadoresPorTexto(termo, item)) {
+                            listModel.addElement(item);
+                        }
+                    }
+                }
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+            });
 
-            if (result == JOptionPane.OK_OPTION && comboAtrasados.getSelectedIndex() != -1) {
-                br.com.cana.model.Jogador jLista = disponiveis.get(comboAtrasados.getSelectedIndex());
-                String nomeAtrasado = (jLista.getApelido() != null && !jLista.getApelido().trim().isEmpty())
-                        ? jLista.getApelido()
-                        : jLista.getNome();
+            panelModal.add(txtBusca, BorderLayout.NORTH);
+            panelModal.add(scrollList, BorderLayout.CENTER);
 
-                // Instancia o SERVICE para buscar o registro atualizado
+            int result = JOptionPane.showConfirmDialog(this, panelModal, "Jogador Atrasado", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION && listAtrasados.getSelectedValue() != null) {
+                String selecionadoRaw = listAtrasados.getSelectedValue();
+                String nomeAtrasado = partidaService.obterNomeAtivo(selecionadoRaw.substring(selecionadoRaw.indexOf("]") + 1).trim());
+
                 br.com.cana.service.JogadorService jogadorService = new br.com.cana.service.JogadorService();
-
-                // Recupera o objeto do jogador completo
                 br.com.cana.model.Jogador jModel = jogadorService.buscarPorNomeOuApelido(nomeAtrasado);
 
                 if (jModel != null) {
-                    // 🎯 VALIDAÇÃO REORGANIZADA: Utiliza o método de substituição que ignora o
-                    // financeiro
                     String msgRestricao = partidaService.validarRestricaoParaSubstituicao(nomeAtrasado);
                     if (msgRestricao != null) {
                         JOptionPane.showMessageDialog(this, msgRestricao, "Restrição", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
-                }
 
-                // Se passou na validação, adiciona o atrasado no pote de reservas (Nenhum)
-                if (partidaObjeto != null && jModel != null) {
                     br.com.cana.model.JogadorPartida jpNew = new br.com.cana.model.JogadorPartida();
                     jpNew.setJogador(jModel);
                     jpNew.setTime("Nenhum");
                     jpNew.setStatus("Reserva");
-                    jpNew.setFuncao(
-                            jModel.getPosicao() != null && jModel.getPosicao().toUpperCase().contains("GOL") ? "GOL"
-                                    : "LIN");
-
+                    jpNew.setFuncao(jModel.getPosicao() != null && jModel.getPosicao().toUpperCase().contains("GOL") ? "GOL" : "LIN");
+                    
                     partidaObjeto.getListaGeralPresenca().add(jpNew);
-
-                    // Atualiza o grid de botões para o atrasado aparecer imediatamente no banco
                     atualizarGridBotoesReservas(painelReservas);
-                    JOptionPane.showMessageDialog(this,
-                            "O jogador '" + nomeAtrasado + "' foi adicionado ao banco de reservas!");
+                    JOptionPane.showMessageDialog(this, "O jogador '" + nomeAtrasado + "' foi adicionado ao banco!");
                 }
             }
         });
@@ -467,6 +476,7 @@ public class TelaSubstituicaoView extends JFrame {
         scroll.setBorder(null);
         scroll.getViewport().setBackground(corTime);
         painel.add(scroll, BorderLayout.CENTER);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
         return painel;
     }
 

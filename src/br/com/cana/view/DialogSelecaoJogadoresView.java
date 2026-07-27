@@ -4,6 +4,8 @@ import javax.swing.*;
 import java.awt.*;
 import br.com.cana.util.ImagemUtil;
 import br.com.cana.model.Jogador;
+import br.com.cana.service.PartidaService;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +26,7 @@ public class DialogSelecaoJogadoresView extends JDialog {
         setLayout(new BorderLayout());
 
         // 🌟 2. PAINEL DO TOPO: Cria uma barra fixa superior para abrigar o contador
-        JPanel painelTopo = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel painelTopo = new JPanel(new BorderLayout(10, 5));
         painelTopo.setBackground(Color.WHITE);
         painelTopo.setBorder(BorderFactory.createEmptyBorder(12, 16, 6, 16));
 
@@ -32,7 +34,13 @@ public class DialogSelecaoJogadoresView extends JDialog {
         lblContador.setFont(new Font("SansSerif", Font.BOLD, 14));
         lblContador.setForeground(new Color(0x333333));
 
-        painelTopo.add(lblContador);
+        // Campo de Busca
+        JTextField txtBusca = new JTextField();
+        txtBusca.setPreferredSize(new Dimension(150, 30));
+        txtBusca.putClientProperty("JTextField.placeholderText", "🔍 Buscar...");
+
+        painelTopo.add(lblContador, BorderLayout.WEST);
+        painelTopo.add(txtBusca, BorderLayout.EAST);
         add(painelTopo, BorderLayout.NORTH); // Fixa no norte da tela
 
         painelLista = new JPanel();
@@ -113,6 +121,23 @@ public class DialogSelecaoJogadoresView extends JDialog {
         scroll.setBorder(null);
         scroll.getViewport().setBackground(Color.WHITE);
         add(scroll, BorderLayout.CENTER);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        // 🌟 LISTENER DA BUSCA TEMPO REAL
+        txtBusca.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void filtrar() {
+                String termo = txtBusca.getText();
+                PartidaService ps = new PartidaService();
+                for (JCheckBox cb : checkBoxes) {
+                    cb.setVisible(ps.filtrarJogadoresPorTexto(termo, cb.getText()));
+                }
+                painelLista.revalidate();
+                painelLista.repaint();
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { filtrar(); }
+        });
 
         // --- BOTÃO CONFIRMAR ---
         JPanel painelBotao = new JPanel(new FlowLayout(FlowLayout.CENTER));

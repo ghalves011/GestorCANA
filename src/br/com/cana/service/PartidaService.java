@@ -22,7 +22,8 @@ public class PartidaService {
         this.contribuicaoService = new ContribuicaoService();
     }
 
-    public void sortearTimesTatico(Partida partida, List<Jogador> presentes, String formacao) {
+    public void sortearTimesTatico(Partida partida, List<Jogador> presentes, String formacaoAzul,
+            String formacaoVermelho) {
         partida.getJogadoresAzul().clear();
         partida.getJogadoresVermelho().clear();
 
@@ -58,29 +59,12 @@ public class PartidaService {
         }
 
         // 3. O SORTEIO: Agora sim, ele acontece com os titulares definidos
-        SorteioUtil.realizarSorteio(partida, titulares, formacao);
+        SorteioUtil.realizarSorteio(partida, titulares, formacaoAzul);
 
-        // 4. PREENCHIMENTO DA LISTA DE PRESENÇA (Súmula Final)
-        // Azul
-        for (Jogador j : partida.getJogadoresAzul()) {
-            JogadorPartida jp = new JogadorPartida();
-            jp.setJogador(j);
-            jp.setTime("Azul");
-            jp.setStatus("Titular");
-            jp.setFuncao("Azul_" + (j.getPosicao().toUpperCase().contains("GOL") ? "GOL" : "LIN") + "_"
-                    + (partida.getJogadoresAzul().indexOf(j) + 1));
-            listaPresenca.add(jp);
-        }
-        // Vermelho
-        for (Jogador j : partida.getJogadoresVermelho()) {
-            JogadorPartida jp = new JogadorPartida();
-            jp.setJogador(j);
-            jp.setTime("Vermelho");
-            jp.setStatus("Titular");
-            jp.setFuncao("Vermelho_" + (j.getPosicao().toUpperCase().contains("GOL") ? "GOL" : "LIN") + "_"
-                    + (partida.getJogadoresVermelho().indexOf(j) + 1));
-            listaPresenca.add(jp);
-        }
+        // 4. PREENCHIMENTO DA LISTA DE PRESENÇA COM POSIÇÕES FIXAS
+        alocarPosicoesFixas(partida.getJogadoresAzul(), listaPresenca, "Azul", formacaoAzul);
+        alocarPosicoesFixas(partida.getJogadoresVermelho(), listaPresenca, "Vermelho", formacaoVermelho);
+
         // Reserva (O que sobrou no pote)
         for (Jogador j : deEspera) {
             JogadorPartida jp = new JogadorPartida();
@@ -1280,12 +1264,7 @@ public class PartidaService {
             return "MEI";
         if (posicao.contains("ATACANTE"))
             return "ATA";
-        if (posicao.contains("FIXO"))
-            return "FIX";
-        if (posicao.contains("ALA"))
-            return "ALA";
-        if (posicao.contains("PIVÔ") || posicao.contains("PIVO"))
-            return "PIV";
+
         return posicao.length() > 3 ? posicao.substring(0, 3) : posicao;
     }
 
@@ -1362,6 +1341,162 @@ public class PartidaService {
                 }
                 return true;
             }
+        }
+        return false;
+    }
+
+    // --- 1. BUSCA E FILTRAGEM ---
+    public boolean filtrarJogadoresPorTexto(String busca, String textoJogador) {
+        if (busca == null || busca.trim().isEmpty())
+            return true;
+        // Remove acentos e joga pra minúsculo para uma busca perfeita
+        String b = java.text.Normalizer.normalize(busca.toLowerCase(), java.text.Normalizer.Form.NFD)
+                .replaceAll("[^\\p{ASCII}]", "");
+        String t = java.text.Normalizer.normalize(textoJogador.toLowerCase(), java.text.Normalizer.Form.NFD)
+                .replaceAll("[^\\p{ASCII}]", "");
+        return t.contains(b);
+    }
+
+    // Retorna o template das posições fixas conforme o esquema tático escolhido
+    private List<String> obterTemplateFormacao(String formacao) {
+        List<String> pos = new ArrayList<>();
+        pos.add("GOL"); // Slot 1 é sempre o Goleiro
+
+        // Limpa a string tirando espaços para evitar erros de formatação
+        String f = (formacao != null) ? formacao.replaceAll("\\s+", "").trim() : "";
+
+        switch (f) {
+            case "4-4-2":
+                pos.addAll(
+                        java.util.Arrays.asList("LAT", "LAT", "ZAG", "ZAG", "MEI", "MEI", "MEI", "MEI", "ATA", "ATA"));
+                break;
+
+            case "4-3-3":
+                pos.addAll(
+                        java.util.Arrays.asList("LAT", "LAT", "ZAG", "ZAG", "MEI", "MEI", "MEI", "ATA", "ATA", "ATA"));
+                break;
+
+            case "3-5-2":
+                pos.addAll(
+                        java.util.Arrays.asList("ZAG", "ZAG", "ZAG", "MEI", "MEI", "MEI", "MEI", "MEI", "ATA", "ATA"));
+                break;
+
+            case "4-5-1":
+                pos.addAll(
+                        java.util.Arrays.asList("LAT", "LAT", "ZAG", "ZAG", "MEI", "MEI", "MEI", "MEI", "MEI", "ATA"));
+                break;
+
+            case "3-4-3":
+                pos.addAll(
+                        java.util.Arrays.asList("ZAG", "ZAG", "ZAG", "MEI", "MEI", "MEI", "MEI", "ATA", "ATA", "ATA"));
+                break;
+
+            case "5-3-2":
+                pos.addAll(
+                        java.util.Arrays.asList("LAT", "LAT", "ZAG", "ZAG", "ZAG", "MEI", "MEI", "MEI", "ATA", "ATA"));
+                break;
+
+            default:
+                // Caso venha alguma formação não mapeada, gera posições de linha genéricas
+                for (int i = 0; i < 10; i++)
+                    pos.add("LIN");
+                break;
+        }
+        return pos;
+    }
+
+    private void alocarPosicoesFixas(List<Jogador> time, List<JogadorPartida> listaPresenca, String nomeTime,
+            String formacao) {
+        List<String> vagasFixas = obterTemplateFormacao(formacao);
+        List<Jogador> naoAlocados = new ArrayList<>(time);
+        JogadorPartida[] timeFormatado = new JogadorPartida[vagasFixas.size()];
+
+        // 1. PASSO 1: Encaixa OS ESPECIALISTAS nas vagas exatas do template
+        for (int i = 0; i < vagasFixas.size(); i++) {
+            String vagaSigla = vagasFixas.get(i); // Ex: "GOL", "LAT", "ZAG", "MEI", "ATA"
+
+            Jogador especialistaEncontrado = null;
+            for (Jogador j : naoAlocados) {
+                String posJogadorSigla = encurtarPosicaoInterna(j.getPosicao());
+
+                if (posJogadorSigla.equalsIgnoreCase(vagaSigla)) {
+                    especialistaEncontrado = j;
+                    break; // Achou um especialista para esta vaga i
+                }
+            }
+
+            if (especialistaEncontrado != null) {
+                JogadorPartida jp = new JogadorPartida();
+                jp.setJogador(especialistaEncontrado);
+                jp.setTime(nomeTime);
+                jp.setStatus("Titular");
+                jp.setFuncao(nomeTime + "_" + vagaSigla + "_" + (i + 1));
+
+                timeFormatado[i] = jp;
+                naoAlocados.remove(especialistaEncontrado);
+            }
+        }
+
+        // 2. PASSO 2: IMPROVISO (Apenas para vagas que realmente não tiveram
+        // especialista)
+        for (int i = 0; i < vagasFixas.size(); i++) {
+            if (timeFormatado[i] == null && !naoAlocados.isEmpty()) {
+                Jogador improvisado = naoAlocados.remove(0);
+                JogadorPartida jp = new JogadorPartida();
+                jp.setJogador(improvisado);
+                jp.setTime(nomeTime);
+                jp.setStatus("Titular");
+                jp.setFuncao(nomeTime + "_" + vagasFixas.get(i) + "_" + (i + 1));
+                timeFormatado[i] = jp;
+            }
+        }
+
+        // 3. PASSO 3: TIME INCOMPLETO (Preenche com genéricos se houver menos de 11
+        // jogadores)
+        for (int i = 0; i < vagasFixas.size(); i++) {
+            if (timeFormatado[i] == null) {
+                Jogador jGenerico = new Jogador();
+                jGenerico.setNome(nomeTime + " " + (i + 1));
+
+                JogadorPartida jp = new JogadorPartida();
+                jp.setJogador(jGenerico);
+                jp.setTime(nomeTime);
+                jp.setStatus("Incompleto");
+                jp.setFuncao(nomeTime + "_" + vagasFixas.get(i) + "_" + (i + 1));
+                timeFormatado[i] = jp;
+            }
+        }
+
+        // 4. PASSO 4: Adiciona na lista de presença mantendo a ordem tática exata da
+        // formação
+        for (JogadorPartida jp : timeFormatado) {
+            if (jp != null) {
+                listaPresenca.add(jp);
+            }
+        }
+    }
+
+    // --- 3. INVERSÃO MANUAL DE POSIÇÕES NO MESMO TIME ---
+    public boolean inverterPosicaoMesmoTime(Partida partida, String nomeA, String nomeB) {
+        JogadorPartida jpA = null;
+        JogadorPartida jpB = null;
+
+        for (JogadorPartida jp : partida.getListaGeralPresenca()) {
+            String apelido = jp.getJogador().getApelido() != null ? jp.getJogador().getApelido()
+                    : jp.getJogador().getNome();
+            if (apelido.equalsIgnoreCase(nomeA))
+                jpA = jp;
+            if (apelido.equalsIgnoreCase(nomeB))
+                jpB = jp;
+        }
+
+        // Se achou os dois e eles são do mesmo time, inverte a "cadeira" (Função
+        // tática)
+        if (jpA != null && jpB != null && jpA.getTime().equals(jpB.getTime())) {
+            String funcaoA = jpA.getFuncao();
+            jpA.setFuncao(jpB.getFuncao());
+            jpB.setFuncao(funcaoA);
+            return true;
         }
         return false;
     }
