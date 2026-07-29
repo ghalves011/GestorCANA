@@ -1162,9 +1162,8 @@ public class PartidaService {
     }
 
     /**
-     * RN: Agrupa TODOS os jogadores pelo slot de função tática, combinando
-     * infinitamente no formato "Nome A / Nome B / Nome C" com seus respectivos
-     * emojis.
+     * RN: Agrupa os jogadores pela VAGA TÁTICA FIXA (ex: Azul_ZAG_1)
+     * combinando Titular / Substituto com seus emojis históricos.
      */
     public List<Object[]> gerarLinhasGridHistorico(Partida partida, String timeFiltrado) {
         List<Object[]> linhasDoGrid = new ArrayList<>();
@@ -1172,68 +1171,107 @@ public class PartidaService {
             return linhasDoGrid;
         }
 
-        // 1. Filtra os jogadores do time e agrupa pelo slot (Ex: Azul_LIN_3)
-        java.util.Map<String, List<br.com.cana.model.JogadorPartida>> agrupadoPorFuncao = new java.util.LinkedHashMap<>();
+        // 1. Agrupa os jogadores pelo código exato do slot tático (Ex: "Azul_ZAG_1")
+        java.util.Map<String, List<br.com.cana.model.JogadorPartida>> agrupadoPorSlot = new java.util.LinkedHashMap<>();
 
         for (br.com.cana.model.JogadorPartida jp : partida.getListaGeralPresenca()) {
-            String timeBanco = jp.getTime() != null ? jp.getTime().trim() : "";
-            String funcBanco = jp.getFuncao() != null ? jp.getFuncao().trim() : "";
+            if (jp == null || jp.getJogador() == null)
+                continue;
 
-            // Pega os ativos do time e também a galera que foi substituída (que fica com o
-            // time "Nenhum" mas herda a função)
-            if (timeBanco.equalsIgnoreCase(timeFiltrado) || funcBanco.startsWith(timeFiltrado + "_")) {
-                String funcaoSlot = funcBanco.isEmpty() ? "Linha" : funcBanco;
-                agrupadoPorFuncao.computeIfAbsent(funcaoSlot, k -> new ArrayList<>()).add(jp);
+            String funcBanco = jp.getFuncao() != null ? jp.getFuncao().trim() : "";
+            String timeBanco = jp.getTime() != null ? jp.getTime().trim() : "";
+
+            // 🛑 FILTRO DE VAGA FIXA: Verifica se a função começa com "Azul_" ou
+            // "Vermelho_"
+            boolean ehDoTime = funcBanco.toUpperCase().startsWith(timeFiltrado.toUpperCase() + "_")
+                    || timeBanco.equalsIgnoreCase(timeFiltrado);
+
+            if (ehDoTime && !funcBanco.isEmpty()) {
+                agrupadoPorSlot.computeIfAbsent(funcBanco, k -> new ArrayList<>()).add(jp);
             }
         }
 
-        // 2. Monta as linhas da JTable dinamicamente
-        for (java.util.Map.Entry<String, List<br.com.cana.model.JogadorPartida>> entry : agrupadoPorFuncao.entrySet()) {
-            List<br.com.cana.model.JogadorPartida> jogadoresNoSlot = entry.getValue();
+        // 2. Monta as linhas da JTable extraindo os nomes e posições do formato novo
+        for (java.util.Map.Entry<String, List<br.com.cana.model.JogadorPartida>> entry : agrupadoPorSlot.entrySet()) {
+            String codigoSlot = entry.getKey(); // Ex: "Azul_ZAG_1"
+            List<br.com.cana.model.JogadorPartida> jogadoresDaCadeira = entry.getValue();
+
+            // 🌟 GARANTE A ORDEM HISTÓRICA: Titular sempre em 1º, Substitutos/Reservas
+            // depois
+            jogadoresDaCadeira.sort((jp1, jp2) -> {
+                boolean jp1IsTitular = "Titular".equalsIgnoreCase(jp1.getStatus());
+                boolean jp2IsTitular = "Titular".equalsIgnoreCase(jp2.getStatus());
+
+                if (jp1IsTitular && !jp2IsTitular)
+                    return -1; // jp1 (Titular) vai pro topo
+                if (!jp1IsTitular && jp2IsTitular)
+                    return 1; // jp2 (Titular) vai pro topo
+                return Integer.compare(jp1.getId(), jp2.getId()); // Critério de desempate
+            });
 
             StringBuilder nomesBuilder = new StringBuilder();
             StringBuilder eventosBuilder = new StringBuilder();
-            String posFinal = entry.getKey();
+            java.util.Set<String> nomesAdicionados = new java.util.HashSet<>();
 
-            for (int i = 0; i < jogadoresNoSlot.size(); i++) {
-                br.com.cana.model.JogadorPartida jp = jogadoresNoSlot.get(i);
+            int idx = 0;
+            for (br.com.cana.model.JogadorPartida jp : jogadoresDaCadeira) {
                 br.com.cana.model.Jogador j = jp.getJogador();
-
                 if (j == null)
                     continue;
 
-                String nome = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido()
-                        : j.getNome();
-                String ev = formatarEmojisHistoricos(jp);
+                String nome = (j.getApelido() != null && !j.getApelido().trim().isEmpty())
+                        ? j.getApelido().trim()
+                        : j.getNome().trim();
 
-                // Garante um espaço vazio visual para alinhar as barras caso o jogador não
-                // tenha gols/cartões
+                // Evita duplicação do mesmo atleta na mesma cadeira
+                if (nomesAdicionados.contains(nome.toLowerCase()))
+                    continue;
+                nomesAdicionados.add(nome.toLowerCase());
+
+                String ev = formatarEmojisHistoricos(jp);
                 if (ev.isEmpty())
                     ev = " ";
 
-                if (i == 0) {
-                    posFinal = j.getPosicao();
+                if (idx == 0) {
                     nomesBuilder.append(nome);
                     eventosBuilder.append(ev);
                 } else {
                     nomesBuilder.append(" / ").append(nome);
                     eventosBuilder.append(" / ").append(ev);
                 }
+                idx++;
             }
 
-            String eventosFinal = eventosBuilder.toString();
+            if (idx == 0)
+                continue; // Pula slots que ficaram vazios
 
-            // Se absolutamente ninguém dessa linha fez gol ou tomou cartão, limpa tudo para
-            // não ficar uma barra "/" voando na tela
+            String eventosFinal = eventosBuilder.toString();
             if (eventosFinal.replace("/", "").trim().isEmpty()) {
                 eventosFinal = "";
             }
 
-            String posCurta = encurtarPosicaoInterna(posFinal);
+            // 🛠️ EXTRAÇÃO DA SIGLA DA VAGA FIXA (ex: "Azul_ZAG_1" -> "ZAG")
+            String posCurta = extrairSiglaDoCodigoSlot(codigoSlot);
+
             linhasDoGrid.add(new Object[] { nomesBuilder.toString(), posCurta, eventosFinal });
         }
 
         return linhasDoGrid;
+    }
+
+    /**
+     * Auxiliar para fatiar o código "Time_POSICAO_Numero"
+     * Exemplo: "Azul_ZAG_1" -> retorna "ZAG"
+     */
+    private String extrairSiglaDoCodigoSlot(String codigoSlot) {
+        if (codigoSlot == null || !codigoSlot.contains("_")) {
+            return "--";
+        }
+        String[] partes = codigoSlot.split("_");
+        if (partes.length >= 2) {
+            return partes[1].toUpperCase().trim(); // Pega a posição do meio
+        }
+        return "--";
     }
 
     private String formatarEmojisHistoricos(br.com.cana.model.JogadorPartida jp) {
