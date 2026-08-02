@@ -326,41 +326,57 @@ public class TelaPartidaLiveView extends JFrame {
             // 🌟 NOVO LAÇO: Lê direto da ListaGeralPresenca para respeitar a ordem exata da
             // formação!
             if (partidaObjeto != null && partidaObjeto.getListaGeralPresenca() != null) {
-                for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
+                String timeAlvo = isAzul ? "Azul" : "Vermelho";
 
-                    // Descobre se o jogador da iteração pertence ao painel que estamos desenhando
-                    // (Azul ou Vermelho)
-                    boolean pertenceAoTime = isAzul ? "Azul".equalsIgnoreCase(jp.getTime())
-                            : "Vermelho".equalsIgnoreCase(jp.getTime());
+                // 🌟 MODO HISTÓRICO: Usa o seu service para manter "Titular / Reserva"
+                if (modoHistorico) {
+                    java.util.List<Object[]> linhasHistorico = partidaService.gerarLinhasGridHistorico(partidaObjeto,
+                            timeAlvo);
+                    for (Object[] linha : linhasHistorico) {
+                        model.addRow(linha);
+                    }
+                }
+                // 🌟 MODO LIVE: Consolida 1 registro por vaga fixa/cadeira tática
+                else {
+                    java.util.Map<String, br.com.cana.model.JogadorPartida> slotsTitulares = new java.util.LinkedHashMap<>();
 
-                    // Só desenha se for do time certo e for Titular
-                    if (pertenceAoTime && "Titular".equalsIgnoreCase(jp.getStatus())) {
+                    for (br.com.cana.model.JogadorPartida jp : partidaObjeto.getListaGeralPresenca()) {
+                        if (jp == null || jp.getJogador() == null)
+                            continue;
 
+                        boolean pertenceAoTime = timeAlvo.equalsIgnoreCase(jp.getTime());
+                        if (pertenceAoTime && "Titular".equalsIgnoreCase(jp.getStatus())) {
+                            String chaveSlot = (jp.getFuncao() != null && !jp.getFuncao().isEmpty())
+                                    ? jp.getFuncao()
+                                    : jp.getJogador().getNome();
+
+                            slotsTitulares.putIfAbsent(chaveSlot, jp);
+                        }
+                    }
+
+                    for (br.com.cana.model.JogadorPartida jp : slotsTitulares.values()) {
                         br.com.cana.model.Jogador j = jp.getJogador();
                         String nomeExibir = (j.getApelido() != null && !j.getApelido().trim().isEmpty())
-                                ? j.getApelido()
-                                : j.getNome();
+                                ? j.getApelido().trim()
+                                : j.getNome().trim();
 
-                        // 1. Extrai a sigla da vaga FIXA (Ex: "Vermelho_MEI_8" -> "MEI")
                         String posicaoEncurtada = "LIN";
                         if (jp.getFuncao() != null && jp.getFuncao().contains("_")) {
                             String[] partes = jp.getFuncao().split("_");
                             if (partes.length >= 2) {
-                                posicaoEncurtada = partes[1]; // Pega a sigla (GOL, LAT, ZAG, MEI, ATA)
+                                posicaoEncurtada = partes[1];
                             }
                         }
 
-                        // 2. Reconstrução histórica de eventos (Gols e Cartões)
-                        String eventosReconstruídos = "";
+                        StringBuilder eventosReconstruídos = new StringBuilder();
                         for (int g = 0; g < jp.getGols(); g++)
-                            eventosReconstruídos += "⚽";
+                            eventosReconstruídos.append("⚽");
                         for (int a = 0; a < jp.getCartaoAmarelo(); a++)
-                            eventosReconstruídos += "🟨";
+                            eventosReconstruídos.append("🟨");
                         for (int v = 0; v < jp.getCartaoVermelho(); v++)
-                            eventosReconstruídos += "🟥";
+                            eventosReconstruídos.append("🟥");
 
-                        // 3. Adiciona a linha na tabela NA ORDEM EXATA do backend!
-                        model.addRow(new Object[] { nomeExibir, posicaoEncurtada, eventosReconstruídos });
+                        model.addRow(new Object[] { nomeExibir, posicaoEncurtada, eventosReconstruídos.toString() });
                     }
                 }
             }
