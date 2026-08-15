@@ -40,7 +40,7 @@ public class SorteioUtil {
         }
 
         // Distribui os jogadores de linha usando os termos exatos do cadastro por extenso
-        String[] posicoesLinha = { "LATERAL", "ZAGUEIRO", "MEIA", "ATACANTE" };
+        String[] posicoesLinha = { "LATERAL", "ZAGUEIRO", "VOLANTE", "MEIA", "ATACANTE" };
         for (String pos : posicoesLinha) {
             List<Jogador> candidatos = potes.getOrDefault(pos, new ArrayList<>());
             Collections.shuffle(candidatos);
@@ -54,7 +54,7 @@ public class SorteioUtil {
 
         // Pote de Sobras (quem sobrou vai para o banco de reservas)
         List<Jogador> sobras = new ArrayList<>();
-        String[] posicoesLinhaSobras = { "LATERAL", "ZAGUEIRO", "MEIA", "ATACANTE" };
+        String[] posicoesLinhaSobras = { "LATERAL", "ZAGUEIRO", "VOLANTE", "MEIA", "ATACANTE" };
         for (String pos : posicoesLinhaSobras) {
             List<Jogador> sobrouNaPosicao = potes.getOrDefault(pos, new ArrayList<>());
             sobras.addAll(sobrouNaPosicao);
@@ -84,16 +84,19 @@ public class SorteioUtil {
         Map<String, Integer> v = new HashMap<>();
         v.put("GOLEIRO", 1);
 
+        // Contagens alinhadas com os templates de obterTemplateFormacao() no PartidaService
         switch (formacao.toUpperCase().trim()) {
-            case "4-4-2": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("MEIA", 4); v.put("ATACANTE", 2); break;
-            case "4-3-3": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("MEIA", 3); v.put("ATACANTE", 3); break;
-            case "3-5-2": v.put("ZAGUEIRO", 3); v.put("LATERAL", 0); v.put("MEIA", 5); v.put("ATACANTE", 2); break;
-            case "4-5-1": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("MEIA", 5); v.put("ATACANTE", 1); break;
+            case "4-4-2": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("VOLANTE", 2); v.put("MEIA", 2); v.put("ATACANTE", 2); break;
+            case "4-3-3": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("VOLANTE", 1); v.put("MEIA", 2); v.put("ATACANTE", 3); break;
+            case "3-5-2": v.put("ZAGUEIRO", 3); v.put("LATERAL", 0); v.put("VOLANTE", 2); v.put("MEIA", 3); v.put("ATACANTE", 2); break;
+            case "4-5-1": v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("VOLANTE", 2); v.put("MEIA", 3); v.put("ATACANTE", 1); break;
+            case "3-4-3": v.put("ZAGUEIRO", 3); v.put("LATERAL", 0); v.put("VOLANTE", 2); v.put("MEIA", 3); v.put("ATACANTE", 2); break;
+            case "5-3-2": v.put("ZAGUEIRO", 3); v.put("LATERAL", 2); v.put("VOLANTE", 2); v.put("MEIA", 1); v.put("ATACANTE", 2); break;
             case "LIVRE":
-                v.put("ZAGUEIRO", 0); v.put("LATERAL", 0); v.put("MEIA", 0); v.put("ATACANTE", 0);
+                v.put("ZAGUEIRO", 0); v.put("LATERAL", 0); v.put("VOLANTE", 0); v.put("MEIA", 0); v.put("ATACANTE", 0);
                 break;
             default:
-                v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("MEIA", 4); v.put("ATACANTE", 2);
+                v.put("ZAGUEIRO", 2); v.put("LATERAL", 2); v.put("VOLANTE", 2); v.put("MEIA", 2); v.put("ATACANTE", 2);
         }
         return v;
     }
@@ -130,7 +133,7 @@ public class SorteioUtil {
      */
     private static List<Jogador> ordenarTimePorPosicao(List<Jogador> time) {
         List<Jogador> timeOrdenado = new ArrayList<>();
-        String[] ordemPosicoes = { "GOLEIRO", "LATERAL", "ZAGUEIRO", "MEIA", "ATACANTE" };
+        String[] ordemPosicoes = { "GOLEIRO", "LATERAL", "ZAGUEIRO", "VOLANTE", "MEIA", "ATACANTE" };
 
         for (String pos : ordemPosicoes) {
             for (Jogador j : time) {
