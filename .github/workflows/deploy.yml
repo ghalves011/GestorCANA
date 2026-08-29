@@ -30,4 +30,4 @@ jobs:
             docker pull ${{ secrets.DOCKER_USERNAME }}/gestorcanaapi-deploy:latest
             docker stop gestorcanaapi-deploy-container || true
             docker rm gestorcanaapi-deploy-container || true
-            docker run -d --name gestorcanaapi-deploy-container -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/gestorcanaapi-deploy:latest
+            docker run -d --restart=always --name gestorcanaapi-deploy-container -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/gestorcanaapi-deploy:latest
