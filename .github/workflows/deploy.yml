@@ -12,13 +12,13 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Build Docker image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/sua-api:latest ./gestorcana-api
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/gestorcana-api:latest ./gestorcana-api
       
       - name: Login Docker Hub
         run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
       
       - name: Push Docker image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/sua-api:latest
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/gestorcana-api:latest
       
       - name: Deploy no Oracle Cloud
         uses: appleboy/ssh-action@master
@@ -27,7 +27,7 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
-            docker pull ${{ secrets.DOCKER_USERNAME }}/sua-api:latest
-            docker stop sua-api-container || true
-            docker rm sua-api-container || true
-            docker run -d --name sua-api-container -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/sua-api:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/gestorcana-api:latest
+            docker stop gestorcana-api-container || true
+            docker rm gestorcana-api-container || true
+            docker run -d --name gestorcana-api-container -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/gestorcana-api:latest
