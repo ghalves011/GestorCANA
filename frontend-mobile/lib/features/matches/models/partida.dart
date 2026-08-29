@@ -100,6 +100,14 @@ class Partida {
       'gridVermelho': gridVermelho,
       'formacaoAzul': formacaoAzul,
       'formacaoVermelho': formacaoVermelho,
+      // Transient/computed on the backend (never persisted as columns), but
+      // still real request fields some endpoints read directly off the body
+      // — e.g. /partidas/atrasados-disponiveis compares against these to
+      // exclude players already in the match. Omitting them here always
+      // sent empty lists, so that filter silently excluded no one.
+      'jogadoresAzul': jogadoresAzul.map((Jogador j) => j.toJson()).toList(),
+      'jogadoresVermelho': jogadoresVermelho.map((Jogador j) => j.toJson()).toList(),
+      'listaGeralPresenca': listaGeralPresenca.map((JogadorPartida jp) => jp.toJson()).toList(),
     };
   }
 

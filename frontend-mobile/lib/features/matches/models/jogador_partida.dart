@@ -57,6 +57,10 @@ class JogadorPartida {
     return <String, dynamic>{
       'id': id,
       'jogadorId': jogadorId,
+      // The nested player is what name-matching filters on the backend
+      // (e.g. /partidas/atrasados-disponiveis) actually compare against —
+      // without it, every entry here is invisible to those checks.
+      'jogador': jogador?.toJson(),
       'partidaId': partidaId,
       'time': time,
       'status': status,

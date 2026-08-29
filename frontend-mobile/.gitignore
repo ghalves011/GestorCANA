@@ -46,4 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Claude Code local runtime state
 .claude/
