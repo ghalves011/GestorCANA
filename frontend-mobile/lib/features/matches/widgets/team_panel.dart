@@ -10,10 +10,24 @@ import 'player_row.dart';
 /// in read-only historical mode the screen instead renders
 /// GridHistoricoRow entries directly (no LiveSlot needed there).
 class LiveSlot {
-  LiveSlot({required this.jogador, this.eventos = ''});
+  LiveSlot({required this.jogador, this.eventos = '', String? nomesExibir, this.posicaoSlot})
+      : nomesExibir = nomesExibir ?? jogador.nomeExibir;
 
   Jogador jogador;
   String eventos;
+
+  /// "/"-joined substitution history of display names for this slot (e.g.
+  /// "João / Pedro" after a swap) — mirrors the desktop Nome column, shown
+  /// instead of jogador.nomeExibir so a mid-match substitution keeps the
+  /// outgoing player's name visible in the chain.
+  String nomesExibir;
+
+  /// The tactical slot's own position sigla (e.g. "MEI"), parsed from this
+  /// JogadorPartida's funcao ("Azul_MEI_3") — the formation-assigned
+  /// position, which can differ from jogador.posicao when the player was
+  /// improvised into the slot. Falls back to jogador.posicao for display
+  /// when unset (e.g. before a listaGeralPresenca round trip).
+  String? posicaoSlot;
 }
 
 /// Replaces the desktop's per-team JTable (Nome/Pos/Eventos) with a

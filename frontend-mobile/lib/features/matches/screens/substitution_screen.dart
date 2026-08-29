@@ -65,8 +65,14 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
   @override
   void initState() {
     super.initState();
-    _azul = widget.azul.map((LiveSlot s) => LiveSlot(jogador: s.jogador, eventos: s.eventos)).toList();
-    _vermelho = widget.vermelho.map((LiveSlot s) => LiveSlot(jogador: s.jogador, eventos: s.eventos)).toList();
+    _azul = widget.azul
+        .map((LiveSlot s) =>
+            LiveSlot(jogador: s.jogador, eventos: s.eventos, nomesExibir: s.nomesExibir, posicaoSlot: s.posicaoSlot))
+        .toList();
+    _vermelho = widget.vermelho
+        .map((LiveSlot s) =>
+            LiveSlot(jogador: s.jogador, eventos: s.eventos, nomesExibir: s.nomesExibir, posicaoSlot: s.posicaoSlot))
+        .toList();
     _banco = widget.partida.listaGeralPresenca
         .where((JogadorPartida jp) => (jp.status ?? '').toLowerCase() == 'reserva')
         .map((JogadorPartida jp) => jp.copyWith())
@@ -104,12 +110,18 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
 
     final Jogador entrandoJogador = entrando.jogador!;
     setState(() {
-      // Preserve the outgoing player's event history behind a "/" — even
-      // when they have none yet — so the slot's cell text always reads
-      // "saída / entrada", matching the live-scoreboard mini-language.
+      // Mirrors the desktop's processarSubstituicaoJogador /
+      // apiRegistrarSubstituicaoNoEvento: the Nome column accumulates the
+      // full "saiu / entrou" chain, while Eventos keeps the outgoing
+      // player's history but leaves the new segment blank (even when they
+      // had no events at all) for the incoming player's own tokens.
       lista[index] = LiveSlot(
         jogador: entrandoJogador,
-        eventos: '${slotSaindo.eventos} / ${entrandoJogador.nomeExibir} (${entrandoJogador.posicao ?? ''})',
+        nomesExibir: '${slotSaindo.nomesExibir} / ${entrandoJogador.nomeExibir}',
+        eventos: slotSaindo.eventos.trim().isEmpty ? ' / ' : '${slotSaindo.eventos} / ',
+        // The vacant slot's tactical position doesn't change just because
+        // who's filling it does.
+        posicaoSlot: slotSaindo.posicaoSlot,
       );
       _banco[_bancoSelecionadoIndex!] = _banco[_bancoSelecionadoIndex!].copyWith(jogador: saindo, jogadorId: saindo.id ?? 0);
       _bancoSelecionadoIndex = null;
@@ -170,7 +182,12 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
 
   Future<void> _atribuirCargo(String cargo) async {
     final String? atual = cargo == 'ARBITRO' ? _arbitro : (cargo == 'BANDEIRA1' ? _bandeira1 : _bandeira2);
-    final bool ocupado = (atual ?? '').trim().isNotEmpty && atual!.trim() != '____';
+    // Mirrors the backend's own vacancy check (PartidaService#definirArbitragemSemDuplicidade):
+    // after a removal the field reads "{history} / ____", not "" or a bare
+    // "____" — treating only the bare form as vacant left the role stuck
+    // "occupied" forever after the first removal.
+    final String atualTrim = (atual ?? '').trim();
+    final bool ocupado = atualTrim.isNotEmpty && atualTrim != '____' && !atualTrim.endsWith('/ ____');
 
     if (ocupado) {
       final bool remover = await showConfirmDialog(
@@ -271,11 +288,11 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
             ),
           ),
           ...List<Widget>.generate(lista.length, (int index) {
-            final Jogador j = lista[index].jogador;
+            final LiveSlot slot = lista[index];
             return ListTile(
               dense: true,
-              title: Text(j.nomeExibir),
-              subtitle: Text(j.posicao ?? ''),
+              title: Text(slot.nomesExibir),
+              subtitle: Text(slot.posicaoSlot ?? slot.jogador.posicao ?? ''),
               trailing: _bancoSelecionadoIndex != null ? const Icon(Icons.swap_horiz) : null,
               onTap: () => _tocarSlotTitular(time, index),
             );

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../utils/event_cell_utils.dart';
 import 'team_panel.dart';
 
-/// Single pitch-slot row: name, position, and the active substitution
-/// block's event tokens (⚽ 🟨 🟥). Tap arms/executes a swap; long-press
-/// opens the goal/card/remove actions sheet.
+/// Single pitch-slot row: name, position, and the full events cell text
+/// (⚽ 🟨 🟥). Shown raw — including the "/" history from any
+/// substitution — mirroring the desktop's JTable cell (see
+/// EventoController mini-language docs). Tap arms/executes a swap;
+/// long-press opens the goal/card/remove actions sheet.
 class PlayerRow extends StatelessWidget {
   const PlayerRow({super.key, required this.slot, required this.armado, this.onTap, this.onLongPress});
 
@@ -13,10 +14,6 @@ class PlayerRow extends StatelessWidget {
   final bool armado;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
-
-  /// Only the active (last) substitution block's tokens are shown, per the
-  /// live-scoreboard mini-language ("nome (pos) TOKENS / nome2 TOKENS").
-  String get _tokensAtivos => activeTokensText(slot.eventos);
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +30,7 @@ class PlayerRow extends StatelessWidget {
             Expanded(
               flex: 3,
               child: Text(
-                slot.jogador.nomeExibir,
+                slot.nomesExibir,
                 style: TextStyle(
                   fontStyle: incompleto ? FontStyle.italic : FontStyle.normal,
                   color: incompleto ? Theme.of(context).disabledColor : null,
@@ -42,11 +39,11 @@ class PlayerRow extends StatelessWidget {
             ),
             Expanded(
               flex: 2,
-              child: Text(slot.jogador.posicao ?? '', style: Theme.of(context).textTheme.bodySmall),
+              child: Text(slot.posicaoSlot ?? slot.jogador.posicao ?? '', style: Theme.of(context).textTheme.bodySmall),
             ),
             Expanded(
               flex: 2,
-              child: Text(_tokensAtivos, textAlign: TextAlign.right),
+              child: Text(slot.eventos, textAlign: TextAlign.right),
             ),
           ],
         ),

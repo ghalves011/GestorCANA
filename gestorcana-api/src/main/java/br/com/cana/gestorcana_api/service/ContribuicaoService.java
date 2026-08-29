@@ -121,6 +121,11 @@ public class ContribuicaoService {
             if (Boolean.TRUE.equals(j.getEstaSuspenso()))
                 return false; // Barrado por suspensÃ£o de cartões!
 
+            // Goleiros são isentos de mensalidade: cadastro (e não estar suspenso) já
+            // basta para poderem ser escalados.
+            if (j.getPosicao() != null && j.getPosicao().toUpperCase().trim().contains("GOLEIRO"))
+                return true;
+
             java.time.LocalDate hoje = java.time.LocalDate.now();
             int mesAtual = hoje.getMonthValue();
             int anoAtual = hoje.getYear();

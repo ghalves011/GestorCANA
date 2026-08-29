@@ -42,14 +42,14 @@ class MatchHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final int temporada = ref.watch(temporadaSelecionadaProvider);
-    final AsyncValue<List<Partida>> async = ref.watch(partidasPorTemporadaProvider(temporada));
+    final AsyncValue<List<Partida>> async = ref.watch(partidasPorAnoProvider(temporada));
 
     return AppScaffold(
       title: 'Partidas $temporada',
       body: async.when(
         loading: () => const LoadingView(),
         error: (Object error, StackTrace stackTrace) =>
-            ErrorView(error: error, onRetry: () => ref.invalidate(partidasPorTemporadaProvider(temporada))),
+            ErrorView(error: error, onRetry: () => ref.invalidate(partidasPorAnoProvider(temporada))),
         data: (List<Partida> partidas) {
           if (partidas.isEmpty) {
             return const EmptyState(message: 'Nenhuma partida registrada nesta temporada.');

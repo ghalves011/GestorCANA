@@ -9,6 +9,7 @@ import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/widgets/loading_view.dart';
 import '../../players/models/jogador.dart';
 import '../models/grid_historico_row.dart';
+import '../models/jogador_partida.dart';
 import '../models/partida.dart';
 import '../providers/partida_providers.dart';
 import '../utils/event_cell_utils.dart';
@@ -67,15 +68,52 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     _partida = widget.args.partida;
 
     if (_liveMode) {
-      _azul = _partida.jogadoresAzul
-          .map((Jogador j) => LiveSlot(jogador: j, eventos: '${j.nomeExibir} (${j.posicao ?? ''})'))
-          .toList();
-      _vermelho = _partida.jogadoresVermelho
-          .map((Jogador j) => LiveSlot(jogador: j, eventos: '${j.nomeExibir} (${j.posicao ?? ''})'))
-          .toList();
+      _azul = _slotsParaTime('Azul');
+      _vermelho = _slotsParaTime('Vermelho');
     } else {
       _carregarHistorico();
     }
+  }
+
+  /// Builds this team's live slots from listaGeralPresenca (status
+  /// "Titular"), ordered by the tactical slot index in each entry's funcao
+  /// ("Azul_MEI_3") — this is the backend's actual formation-following
+  /// allocation (obterTemplateFormacao + improvisation), including
+  /// placeholder "Incompleto" slots for positions no one could fill.
+  /// jogadoresAzul/jogadoresVermelho, by contrast, are just grouped by
+  /// registered position with no slot/formation info, so they're only used
+  /// as a fallback if listaGeralPresenca wasn't populated for some reason.
+  List<LiveSlot> _slotsParaTime(String time) {
+    final List<JogadorPartida> titulares = _partida.listaGeralPresenca
+        .where((JogadorPartida jp) => (jp.time ?? '') == time && (jp.status ?? '') == 'Titular')
+        .toList()
+      ..sort((JogadorPartida a, JogadorPartida b) => _indiceFuncao(a.funcao).compareTo(_indiceFuncao(b.funcao)));
+
+    if (titulares.isEmpty) {
+      final List<Jogador> fallback = time == 'Azul' ? _partida.jogadoresAzul : _partida.jogadoresVermelho;
+      return fallback.map((Jogador j) => LiveSlot(jogador: j)).toList();
+    }
+
+    return titulares.map((JogadorPartida jp) {
+      return LiveSlot(
+        jogador: jp.jogador ?? Jogador(nome: '?'),
+        posicaoSlot: _siglaFuncao(jp.funcao),
+      );
+    }).toList();
+  }
+
+  /// "Azul_MEI_3" -> "MEI"; null if funcao doesn't match that shape.
+  String? _siglaFuncao(String? funcao) {
+    final List<String>? partes = funcao?.split('_');
+    return (partes != null && partes.length >= 3) ? partes[1] : null;
+  }
+
+  /// "Azul_MEI_3" -> 3; a very large fallback so malformed entries sort last
+  /// instead of crashing the comparator.
+  int _indiceFuncao(String? funcao) {
+    final List<String>? partes = funcao?.split('_');
+    if (partes == null || partes.length < 3) return 1 << 20;
+    return int.tryParse(partes.last) ?? (1 << 20);
   }
 
   Future<void> _carregarHistorico() async {
@@ -298,12 +336,25 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
 
     setState(() => _finalizando = true);
     try {
-      final List<List<dynamic>> gridAzul =
-          _azul.map((LiveSlot s) => <dynamic>[s.jogador.nomeExibir, s.jogador.posicao ?? '', s.eventos]).toList();
-      final List<List<dynamic>> gridVermelho =
-          _vermelho.map((LiveSlot s) => <dynamic>[s.jogador.nomeExibir, s.jogador.posicao ?? '', s.eventos]).toList();
+      final List<List<dynamic>> gridAzul = _azul
+          .map((LiveSlot s) => <dynamic>[s.nomesExibir, s.posicaoSlot ?? s.jogador.posicao ?? '', s.eventos])
+          .toList();
+      final List<List<dynamic>> gridVermelho = _vermelho
+          .map((LiveSlot s) => <dynamic>[s.nomesExibir, s.posicaoSlot ?? s.jogador.posicao ?? '', s.eventos])
+          .toList();
 
-      await ref.read(partidaRepositoryProvider).finalizar(partida: _partida, gridAzul: gridAzul, gridVermelho: gridVermelho);
+      final bool salvou =
+          await ref.read(partidaRepositoryProvider).finalizar(partida: _partida, gridAzul: gridAzul, gridVermelho: gridVermelho);
+      if (!salvou) {
+        if (mounted) {
+          await showMessageDialog(
+            context,
+            title: 'Erro ao finalizar',
+            message: 'O servidor não confirmou o salvamento da partida. Tente novamente.',
+          );
+        }
+        return;
+      }
 
       if (mounted) {
         final bool compartilhar = await showConfirmDialog(
@@ -369,11 +420,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
                 children: <Widget>[
                   Expanded(flex: 3, child: Text(row.nomes)),
                   Expanded(flex: 2, child: Text(row.pos, style: Theme.of(context).textTheme.bodySmall)),
-                  // Strip the "nome (pos)" prefix the stored cell text
-                  // carries (same mini-language as the live view's
-                  // PlayerRow) — showing it raw put names/positions in
-                  // what's meant to be just the events column.
-                  Expanded(flex: 2, child: Text(activeTokensText(row.eventos), textAlign: TextAlign.right)),
+                  Expanded(flex: 2, child: Text(row.eventos, textAlign: TextAlign.right)),
                 ],
               ),
             ),
