@@ -368,7 +368,9 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
           await ScreenshotUtils.shareBoundaryAsImage(_scoreboardKey, text: _partida.placarFormatado);
         }
       }
-      if (mounted) context.pop();
+      // Straight back to the home screen either way (share or decline),
+      // instead of just popping one route back to match setup.
+      if (mounted) context.go('/');
     } catch (e) {
       if (mounted) {
         await showMessageDialog(context, title: 'Erro ao finalizar', message: e is ApiException ? e.message : e.toString());

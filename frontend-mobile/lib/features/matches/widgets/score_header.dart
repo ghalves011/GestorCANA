@@ -21,6 +21,13 @@ class ScoreHeader extends StatelessWidget {
   final String? bandeira1;
   final String? bandeira2;
 
+  /// Drops a trailing "/ ____" left by removerArbitragem's history
+  /// placeholder for a role nobody currently holds — internal bookkeeping,
+  /// not meant to be shown to the user.
+  static String _semPlaceholder(String? texto) {
+    return (texto ?? '').replaceAll(RegExp(r'(\s*/\s*____)+$'), '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -37,13 +44,15 @@ class ScoreHeader extends StatelessWidget {
             'Azul $golsAzul x $golsVermelho Vermelho',
             style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
           ),
-          if ((arbitro ?? '').isNotEmpty || (bandeira1 ?? '').isNotEmpty || (bandeira2 ?? '').isNotEmpty) ...<Widget>[
+          if (_semPlaceholder(arbitro).isNotEmpty ||
+              _semPlaceholder(bandeira1).isNotEmpty ||
+              _semPlaceholder(bandeira2).isNotEmpty) ...<Widget>[
             const SizedBox(height: 8),
             Text(
               <String>[
-                if ((arbitro ?? '').isNotEmpty) 'Árbitro: $arbitro',
-                if ((bandeira1 ?? '').isNotEmpty) 'Bandeira 1: $bandeira1',
-                if ((bandeira2 ?? '').isNotEmpty) 'Bandeira 2: $bandeira2',
+                if (_semPlaceholder(arbitro).isNotEmpty) 'Árbitro: ${_semPlaceholder(arbitro)}',
+                if (_semPlaceholder(bandeira1).isNotEmpty) 'Bandeira 1: ${_semPlaceholder(bandeira1)}',
+                if (_semPlaceholder(bandeira2).isNotEmpty) 'Bandeira 2: ${_semPlaceholder(bandeira2)}',
               ].join(' · '),
               style: const TextStyle(color: Colors.white70, fontSize: 11),
               textAlign: TextAlign.center,

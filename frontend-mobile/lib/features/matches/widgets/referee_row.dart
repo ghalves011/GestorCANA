@@ -17,11 +17,15 @@ class RefereeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool vazio = (nome ?? '').trim().isEmpty || nome!.trim() == '____';
+    // Drops a trailing "/ ____" left by removerArbitragem's history
+    // placeholder for a role nobody currently holds — internal
+    // bookkeeping, not meant to be shown to the user.
+    final String semPlaceholder = (nome ?? '').replaceAll(RegExp(r'(\s*/\s*____)+$'), '').trim();
+    final bool vazio = semPlaceholder.isEmpty || semPlaceholder == '____';
     return ListTile(
       dense: true,
       title: Text(label),
-      subtitle: Text(vazio ? 'Não definido' : nome!),
+      subtitle: Text(vazio ? 'Não definido' : semPlaceholder),
       trailing: onTap == null ? null : const Icon(Icons.chevron_right),
       onTap: onTap,
     );
