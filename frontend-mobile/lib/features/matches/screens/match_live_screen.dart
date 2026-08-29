@@ -56,8 +56,8 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
   _ArmedSlot? _armado;
   bool _carregandoHistorico = false;
   bool _finalizando = false;
-  // Wraps only the ScoreHeader (not the full scrollable roster) so the
-  // shared image focuses on the placar, matching the desktop print.
+  // Wraps the whole printable match (score + both rosters) for sharing —
+  // opening the shared photo shows everything, matching the desktop print.
   final GlobalKey _scoreboardKey = GlobalKey();
 
   bool get _liveMode => widget.args.liveMode;
@@ -439,13 +439,17 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
       body: _carregandoHistorico
           ? const LoadingView()
           : SingleChildScrollView(
-              child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: Column(
-                  children: <Widget>[
-                    RepaintBoundary(
-                      key: _scoreboardKey,
-                      child: ScoreHeader(
+              child: RepaintBoundary(
+                // Captures the whole printable match (score + both
+                // rosters) as one image, so opening the shared photo shows
+                // everything — the scoreboard sits prominently at the top
+                // so most apps' auto-generated thumbnail still leads with it.
+                key: _scoreboardKey,
+                child: Container(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: Column(
+                    children: <Widget>[
+                      ScoreHeader(
                         nomePartida: _partida.nomePartida ?? '',
                         golsAzul: _partida.golsTimeAzul,
                         golsVermelho: _partida.golsTimeVermelho,
@@ -453,11 +457,11 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
                         bandeira1: _partida.bandeira1,
                         bandeira2: _partida.bandeira2,
                       ),
-                    ),
-                    _liveMode ? _buildTeamPanelLive('Azul') : _buildTeamPanelHistorico('Azul'),
-                    _liveMode ? _buildTeamPanelLive('Vermelho') : _buildTeamPanelHistorico('Vermelho'),
-                    const SizedBox(height: 12),
-                  ],
+                      _liveMode ? _buildTeamPanelLive('Azul') : _buildTeamPanelHistorico('Azul'),
+                      _liveMode ? _buildTeamPanelLive('Vermelho') : _buildTeamPanelHistorico('Vermelho'),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
               ),
             ),
