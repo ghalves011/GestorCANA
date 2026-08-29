@@ -938,10 +938,12 @@ public class PartidaService {
             }
         }
 
-        // 2. Improvisa com a sobra
+        // 2. Improvisa com a sobra, priorizando a posição taticamente mais próxima
+        // da vaga vazia (ex.: falta ATA, tenta MEI antes de LAT/ZAG) em vez de
+        // pegar qualquer um da lista.
         for (int i = 0; i < vagasFixas.size(); i++) {
             if (timeFormatado[i] == null && !naoAlocados.isEmpty()) {
-                Jogador improvisado = naoAlocados.remove(0);
+                Jogador improvisado = removerMaisProximoTaticamente(naoAlocados, vagasFixas.get(i));
                 br.com.cana.gestorcana_api.entity.JogadorPartida jp = new br.com.cana.gestorcana_api.entity.JogadorPartida();
                 jp.setJogadorId(improvisado.getId());
                 jp.setJogador(improvisado);
@@ -952,13 +954,15 @@ public class PartidaService {
             }
         }
 
-        // 3. Completa com genéricos (Azul 1, Vermelho 2) cravando 11 linhas
+        // 3. Completa com um titular "Incompleto" nomeado pela posição da vaga
+        // (ex.: "Mei"), disponível para receber um jogador que chegar atrasado.
         for (int i = 0; i < vagasFixas.size(); i++) {
             if (timeFormatado[i] == null) {
+                String nomePlaceholder = formatarSiglaPosicao(vagasFixas.get(i));
                 Jogador jGen = new Jogador();
                 jGen.setId(0);
-                jGen.setNome(nomeTime + " " + (i + 1));
-                jGen.setApelido(nomeTime + " " + (i + 1));
+                jGen.setNome(nomePlaceholder);
+                jGen.setApelido(nomePlaceholder);
 
                 br.com.cana.gestorcana_api.entity.JogadorPartida jp = new br.com.cana.gestorcana_api.entity.JogadorPartida();
                 jp.setJogadorId(0);
@@ -974,6 +978,39 @@ public class PartidaService {
             if (jp != null)
                 listaPresenca.add(jp);
         }
+    }
+
+    // Ordem tática linear (defesa -> ataque) usada para achar, dentre os jogadores
+    // que sobraram, o mais próximo da posição vazia quando não há um especialista.
+    private static final List<String> ORDEM_TATICA = java.util.Arrays.asList("GOL", "ZAG", "LAT", "VOL", "MEI", "ATA");
+
+    private Jogador removerMaisProximoTaticamente(List<Jogador> naoAlocados, String vagaSigla) {
+        int indiceVaga = ORDEM_TATICA.indexOf(vagaSigla);
+        if (indiceVaga == -1) {
+            return naoAlocados.remove(0);
+        }
+
+        Jogador melhor = null;
+        int menorDistancia = Integer.MAX_VALUE;
+        for (Jogador j : naoAlocados) {
+            int indiceJogador = ORDEM_TATICA.indexOf(encurtarPosicaoInterna(j.getPosicao()));
+            int distancia = (indiceJogador == -1) ? Integer.MAX_VALUE - 1 : Math.abs(indiceJogador - indiceVaga);
+            if (distancia < menorDistancia) {
+                menorDistancia = distancia;
+                melhor = j;
+            }
+        }
+        if (melhor == null) {
+            melhor = naoAlocados.get(0);
+        }
+        naoAlocados.remove(melhor);
+        return melhor;
+    }
+
+    // "MEI" -> "Mei", para o nome de exibição da vaga incompleta.
+    private String formatarSiglaPosicao(String sigla) {
+        if (sigla == null || sigla.isEmpty()) return sigla;
+        return sigla.substring(0, 1).toUpperCase() + sigla.substring(1).toLowerCase();
     }
 
     public void atualizarSubstituicaoNaListaPresenca(Partida partida, String nomeSaindo, String nomeEntrando, String timeAlvo) {
