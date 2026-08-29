@@ -588,6 +588,24 @@ public class PartidaService {
                     }
                 }
 
+                // Tambem exclui quem ja esta no banco de reservas (ou em qualquer outro
+                // status) da partida -- so estar em campo (jogadoresAzul/Vermelho) nao
+                // bastava: um jogador ja substituido para o banco continuava aparecendo
+                // como "disponivel" para o chegou-atrasado.
+                if (!jaRelacionado && partida.getListaGeralPresenca() != null) {
+                    for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : partida.getListaGeralPresenca()) {
+                        if (jp.getJogador() == null)
+                            continue;
+                        String n = (jp.getJogador().getApelido() != null && !jp.getJogador().getApelido().trim().isEmpty())
+                                ? jp.getJogador().getApelido()
+                                : jp.getJogador().getNome();
+                        if (n != null && n.equalsIgnoreCase(nomeJ)) {
+                            jaRelacionado = true;
+                            break;
+                        }
+                    }
+                }
+
                 if (!jaRelacionado) {
                     disponiveisDeFato.add(j);
                 }
