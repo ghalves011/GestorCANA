@@ -6,6 +6,7 @@ RUN mvn clean package -DskipTests
 
 # Etapa 2: Imagem leve de execução com Java 21 JRE
 FROM eclipse-temurin:21-jre-alpine
+ENV TZ=America/Sao_Paulo
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080

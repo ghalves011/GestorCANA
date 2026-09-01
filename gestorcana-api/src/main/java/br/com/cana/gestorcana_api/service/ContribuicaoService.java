@@ -9,10 +9,16 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
 public class ContribuicaoService {
+
+    // O servidor (container Docker) roda em UTC por padrão; sem isso, "hoje" no
+    // fuso do servidor pode já estar um dia (ou mês) à frente do horário real do
+    // Brasil à noite, cobrando o mês seguinte antes da hora.
+    private static final ZoneId FUSO_BRASIL = ZoneId.of("America/Sao_Paulo");
 
     @Autowired
     private ContribuicaoRepository contribuicaoRepository;
@@ -98,7 +104,7 @@ public class ContribuicaoService {
         c.setMes(mes);
         c.setAno(ano);
         c.setPago(1);
-        c.setDataPagamento(LocalDate.now());
+        c.setDataPagamento(LocalDate.now(FUSO_BRASIL));
         c.setValor(BigDecimal.valueOf(valor));
 
         contribuicaoRepository.save(c);
@@ -126,7 +132,7 @@ public class ContribuicaoService {
             if (j.getPosicao() != null && j.getPosicao().toUpperCase().trim().contains("GOLEIRO"))
                 return true;
 
-            java.time.LocalDate hoje = java.time.LocalDate.now();
+            java.time.LocalDate hoje = java.time.LocalDate.now(FUSO_BRASIL);
             int mesAtual = hoje.getMonthValue();
             int anoAtual = hoje.getYear();
 
@@ -134,6 +140,10 @@ public class ContribuicaoService {
             // em 1)
             java.time.LocalDate admissao = j.getDataAdmissao();
             int mesAdmissao = (admissao != null && admissao.getYear() == anoAtual) ? admissao.getMonthValue() : 1;
+
+            // O jogador tem até o dia 10 de cada mês pra pagar: até lá, o mês corrente
+            // ainda não é exigido — só entra na varredura a partir do dia 11.
+            int ultimoMesExigido = (hoje.getDayOfMonth() <= 10) ? mesAtual - 1 : mesAtual;
 
             List<Contribuicao> cobrancas = contribuicaoRepository.findByAno(anoAtual);
 
@@ -147,8 +157,8 @@ public class ContribuicaoService {
                 }
             }
 
-            // Varredura estrita: Tem algum buraco entre a admissão e o mês atual?
-            for (int m = mesAdmissao; m <= mesAtual; m++) {
+            // Varredura estrita: Tem algum buraco entre a admissão e o último mês exigido?
+            for (int m = mesAdmissao; m <= ultimoMesExigido; m++) {
                 if (!mesesPagos[m]) {
                     return false; // Achou um mês não pago ou não gerado na base = DEVEDOR!
                 }
