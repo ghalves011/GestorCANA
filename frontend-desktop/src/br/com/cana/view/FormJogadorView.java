@@ -24,6 +24,10 @@ public class FormJogadorView extends JFrame {
     private JComboBox<String> cbPosicao, cbPeDominante;
     private JTextField txtTimeAnterior;
     private JSpinner spNivel, spAltura, spPeso, spNumCamisa, spTempoExp;
+    // Novatos ainda não têm número de camisa definido; o spinner sozinho não
+    // consegue representar "vazio", então este checkbox controla se
+    // numCamisa é gravado como null.
+    private JCheckBox chkSemNumeroCamisa;
     private JComboBox<Jogador> cbPadrinho;
     private JTextField txtGrauRelacao;
     private JFormattedTextField txtDataAdmissao;
@@ -176,9 +180,18 @@ public class FormJogadorView extends JFrame {
         spNumCamisa = new JSpinner(new SpinnerNumberModel(10, 1, 999, 1));
         spTempoExp = new JSpinner(new SpinnerNumberModel(0, 0, 99, 1));
 
+        chkSemNumeroCamisa = new JCheckBox("Sem número");
+        chkSemNumeroCamisa.setToolTipText("Marque para novatos que ainda não têm número de camisa definido.");
+        chkSemNumeroCamisa.addActionListener(e -> spNumCamisa.setEnabled(!chkSemNumeroCamisa.isSelected()));
+
+        JPanel painelNumCamisa = new JPanel(new BorderLayout(6, 0));
+        painelNumCamisa.setOpaque(false);
+        painelNumCamisa.add(spNumCamisa, BorderLayout.CENTER);
+        painelNumCamisa.add(chkSemNumeroCamisa, BorderLayout.EAST);
+
         adicionarCampo(p, "Nível (1-100)", spNivel, gbc, 1, 0, 1);
         adicionarCampo(p, "Time anterior", txtTimeAnterior, gbc, 1, 1, 1);
-        adicionarCampo(p, "Num da camisa", spNumCamisa, gbc, 1, 2, 1);
+        adicionarCampo(p, "Num da camisa", painelNumCamisa, gbc, 1, 2, 1);
         adicionarCampo(p, "Tempo experiência (anos)", spTempoExp, gbc, 1, 3, 1);
 
         return p;
@@ -191,6 +204,8 @@ public class FormJogadorView extends JFrame {
         jogadorAtual.setEndereco(new Endereco());
         limparCampos();
         carregarPadrinhos();
+        chkSemNumeroCamisa.setSelected(false);
+        spNumCamisa.setEnabled(true);
         bloquearCampos(false);
         txtNome.requestFocus();
     }
@@ -352,7 +367,9 @@ public class FormJogadorView extends JFrame {
             spAltura.commitEdit();
             spPeso.commitEdit();
             spNivel.commitEdit();
-            spNumCamisa.commitEdit();
+            if (spNumCamisa.isEnabled()) {
+                spNumCamisa.commitEdit();
+            }
             spTempoExp.commitEdit();
         } catch (java.text.ParseException e) {
             // Se o usuário digitar algo inválido, o Java ignora e mantém o último valor
@@ -366,7 +383,8 @@ public class FormJogadorView extends JFrame {
         jogadorAtual.setPeso(Double.parseDouble(spPeso.getValue().toString()));
 
         jogadorAtual.setNivel(((Number) spNivel.getValue()).intValue());
-        jogadorAtual.setNumCamisa(((Number) spNumCamisa.getValue()).intValue());
+        jogadorAtual.setNumCamisa(
+                chkSemNumeroCamisa.isSelected() ? null : ((Number) spNumCamisa.getValue()).intValue());
         jogadorAtual.setTempoExperiencia(((Number) spTempoExp.getValue()).intValue());
 
         // 5. REGRA DO PADRINHO
@@ -406,7 +424,12 @@ public class FormJogadorView extends JFrame {
         spPeso.setValue(jogadorAtual.getPeso());
         spNivel.setValue(jogadorAtual.getNivel());
         txtTimeAnterior.setText(jogadorAtual.getTimeAnterior());
-        spNumCamisa.setValue(jogadorAtual.getNumCamisa());
+        Integer numCamisaAtual = jogadorAtual.getNumCamisa();
+        chkSemNumeroCamisa.setSelected(numCamisaAtual == null);
+        spNumCamisa.setEnabled(numCamisaAtual != null);
+        // SpinnerNumberModel não aceita null — mantém o spinner num valor
+        // válido (mas desabilitado/ignorado) quando o jogador não tem número.
+        spNumCamisa.setValue(numCamisaAtual != null ? numCamisaAtual : 10);
         spTempoExp.setValue(jogadorAtual.getTempoExperiencia());
         txtGrauRelacao.setText(jogadorAtual.getGrauRelacaoPadrinho());
 
@@ -479,6 +502,10 @@ public class FormJogadorView extends JFrame {
         // Percorre todos os componentes dentro do JTabbedPane (ou do JFrame)
         configurarEstadoComponentes(getContentPane(), !bloquear);
 
+        // A passagem genérica acima reabilita o spinner mesmo se "Sem número"
+        // estiver marcado — reconcilia o estado real aqui.
+        spNumCamisa.setEnabled(!bloquear && !chkSemNumeroCamisa.isSelected());
+
         // Regra específica para os botões da Toolbar
         btnGravar.setEnabled(!bloquear);
         btnCancelar.setEnabled(!bloquear);
@@ -492,7 +519,7 @@ public class FormJogadorView extends JFrame {
     private void configurarEstadoComponentes(Container container, boolean estado) {
         for (Component c : container.getComponents()) {
             if (c instanceof JTextField || c instanceof JComboBox || c instanceof JSpinner
-                    || c instanceof JFormattedTextField) {
+                    || c instanceof JFormattedTextField || c instanceof JCheckBox) {
                 c.setEnabled(estado);
             } else if (c instanceof Container) {
                 // Se for um painel, chama o método para os filhos dele

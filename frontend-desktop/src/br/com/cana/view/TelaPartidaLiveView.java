@@ -614,15 +614,22 @@ public class TelaPartidaLiveView extends JFrame {
                     DefaultTableModel modelOrigem = isAzulOrigemTroca ? modelAzul : modelVermelho;
 
                     if (isTrocaMesmoTime) {
-                        Object posA = modelOrigem.getValueAt(linhaOrigemTroca, 1);
-                        Object posB = model.getValueAt(row, 1);
+                        // A coluna "Pos" pertence à vaga tática (linha), não ao jogador —
+                        // ela deve permanecer fixa. Apenas o jogador (Nome/Eventos) troca de vaga,
+                        // igual à troca com o time adversário abaixo.
+                        Object nomeA = modelOrigem.getValueAt(linhaOrigemTroca, 0);
+                        Object nomeB = model.getValueAt(row, 0);
+                        Object eventosA = modelOrigem.getValueAt(linhaOrigemTroca, 2);
+                        Object eventosB = model.getValueAt(row, 2);
 
-                        modelOrigem.setValueAt(posB, linhaOrigemTroca, 1);
-                        model.setValueAt(posA, row, 1);
+                        modelOrigem.setValueAt(nomeB, linhaOrigemTroca, 0);
+                        modelOrigem.setValueAt(eventosB, linhaOrigemTroca, 2);
 
-                        reordenarTabelaTaticamente(modelOrigem);
+                        model.setValueAt(nomeA, row, 0);
+                        model.setValueAt(eventosA, row, 2);
+
                         JOptionPane.showMessageDialog(TelaPartidaLiveView.this,
-                                "Posições invertidas no mesmo time com sucesso!");
+                                "Jogadores trocados de vaga no mesmo time com sucesso!");
                     } else {
                         Object nomeA = modelOrigem.getValueAt(linhaOrigemTroca, 0);
                         Object nomeB = model.getValueAt(row, 0);

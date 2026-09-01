@@ -174,12 +174,28 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     }
   }
 
+  // The slot's posicaoSlot belongs to the tactical grid column, not to
+  // whichever player fills it — only the player (and their event history)
+  // moves between slots, mirroring substitution_screen.dart's
+  // _tocarSlotTitular pattern.
+  void _trocarJogadoresNoSlot(LiveSlot destino, LiveSlot origem) {
+    final Jogador jogadorTemp = destino.jogador;
+    final String eventosTemp = destino.eventos;
+    final String nomesExibirTemp = destino.nomesExibir;
+
+    destino.jogador = origem.jogador;
+    destino.eventos = origem.eventos;
+    destino.nomesExibir = origem.nomesExibir;
+
+    origem.jogador = jogadorTemp;
+    origem.eventos = eventosTemp;
+    origem.nomesExibir = nomesExibirTemp;
+  }
+
   void _trocarMesmoTime(String time, int a, int b) {
     final List<LiveSlot> lista = time == 'Azul' ? _azul : _vermelho;
     setState(() {
-      final LiveSlot temp = lista[a];
-      lista[a] = lista[b];
-      lista[b] = temp;
+      _trocarJogadoresNoSlot(lista[a], lista[b]);
     });
     // Backend stub — always returns true, no real server-side work; the
     // reorder already happened locally above. Fire-and-forget.
@@ -190,9 +206,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     final List<LiveSlot> listaA = timeA == 'Azul' ? _azul : _vermelho;
     final List<LiveSlot> listaB = timeB == 'Azul' ? _azul : _vermelho;
     setState(() {
-      final LiveSlot temp = listaA[indexA];
-      listaA[indexA] = listaB[indexB];
-      listaB[indexB] = temp;
+      _trocarJogadoresNoSlot(listaA[indexA], listaB[indexB]);
     });
     ref.read(partidaRepositoryProvider).permutarAdversario(<String, dynamic>{}).catchError((_) => false);
   }

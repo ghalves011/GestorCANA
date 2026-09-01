@@ -64,8 +64,12 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
   void _preencherFormComJogador(Jogador jogador) {
     _jogadorAtual = jogador;
     _controllers.preencherDe(jogador);
-    _posicao = jogador.posicao;
-    _peDominante = jogador.peDominante;
+    // Normaliza posicao/peDominante antes de alimentar os dropdowns: registros
+    // antigos (criados pelo desktop) usam grafia/vocabulário diferente
+    // ("Meia" vs "MEIA", "Destro" vs "DIREITO") e um valor sem correspondência
+    // exata em kPosicoes/kPesDominantes derruba o DropdownButtonFormField.
+    _posicao = normalizarValorDropdown(jogador.posicao, kPosicoes);
+    _peDominante = normalizarValorDropdown(jogador.peDominante, kPesDominantes, kPeDominanteSinonimos);
     _padrinhoId = jogador.padrinhoId;
   }
 
