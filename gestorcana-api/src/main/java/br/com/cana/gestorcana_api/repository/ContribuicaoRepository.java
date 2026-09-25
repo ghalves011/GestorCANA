@@ -22,4 +22,9 @@ public interface ContribuicaoRepository extends JpaRepository<Contribuicao, Inte
     @Modifying
     @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId AND c.mes = :mes AND c.ano = :ano")
     void deletarPorJogadorMesAno(@Param("jogadorId") Integer jogadorId, @Param("mes") Integer mes, @Param("ano") Integer ano);
+
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId")
+    void deletarPorJogador(@Param("jogadorId") Integer jogadorId);
 }

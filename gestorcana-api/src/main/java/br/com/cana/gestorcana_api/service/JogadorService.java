@@ -2,6 +2,7 @@ package br.com.cana.gestorcana_api.service;
 
 import br.com.cana.gestorcana_api.entity.Endereco;
 import br.com.cana.gestorcana_api.entity.Jogador;
+import br.com.cana.gestorcana_api.repository.ContribuicaoRepository;
 import br.com.cana.gestorcana_api.repository.EnderecoRepository;
 import br.com.cana.gestorcana_api.repository.JogadorRepository;
 import br.com.cana.gestorcana_api.repository.JogadorPartidaRepository;
@@ -9,6 +10,7 @@ import br.com.cana.gestorcana_api.util.TextoUtil;
 import br.com.cana.gestorcana_api.util.ValidacaoUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +28,12 @@ public class JogadorService {
 
     @Autowired
     private EnderecoRepository enderecoRepository;
+
+    @Autowired
+    private ContribuicaoRepository contribuicaoRepository;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     public JogadorService() {
     }
@@ -227,7 +235,14 @@ public class JogadorService {
         }
 
         try {
-            jogadorRepository.deleteById(id);
+            // Contribuicao não tem FK para jogador: sem apagar as cobranças junto, elas
+            // ficariam órfãs no banco. Tudo numa transação só — se o jogador não puder
+            // ser excluído (ex.: tem partidas), as cobranças são restauradas.
+            transactionTemplate.executeWithoutResult(status -> {
+                contribuicaoRepository.deletarPorJogador(id);
+                jogadorRepository.deleteById(id);
+                jogadorRepository.flush();
+            });
             return "OK";
         } catch (Exception ex) {
             return "Não foi possível excluir o jogador. Verifique se ele possui partidas ou mensalidades registradas.";

@@ -44,6 +44,19 @@ public class ContribuicaoView extends JFrame {
         configurarEventos();
         ImagemUtil.configurarIcone(this);
         carregarDadosContribuicao();
+
+        // Recarrega ao voltar de outra janela do sistema (ex.: excluiu/cadastrou um
+        // jogador com esta tela aberta). Diálogos da própria tela são ignorados para
+        // não recarregar a cada JOptionPane fechado.
+        addWindowFocusListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowGainedFocus(java.awt.event.WindowEvent e) {
+                Window origem = e.getOppositeWindow();
+                if (origem != null && origem.getOwner() != ContribuicaoView.this) {
+                    carregarDadosContribuicao();
+                }
+            }
+        });
     }
 
     private void configurarJanela() {

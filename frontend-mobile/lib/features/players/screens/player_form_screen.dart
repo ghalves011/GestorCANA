@@ -8,6 +8,7 @@ import '../../../core/utils/phone_utils.dart';
 import '../../../core/utils/rg_utils.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/widgets/loading_view.dart';
+import '../../contributions/providers/contribuicao_providers.dart';
 import '../models/jogador.dart';
 import '../providers/jogador_providers.dart';
 import '../widgets/player_form_controllers.dart';
@@ -138,6 +139,7 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
     try {
       final String resultado = await ref.read(jogadorRepositoryProvider).excluir(id);
       ref.invalidate(todosJogadoresProvider);
+      ref.invalidate(contribuicaoMatrizProvider);
       if (!mounted) return;
       await showMessageDialog(context, title: 'Exclusão', message: resultado);
       if (!mounted) return;
@@ -191,6 +193,7 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
           : await ref.read(jogadorRepositoryProvider).atualizar(jogador.id!, jogador);
 
       ref.invalidate(todosJogadoresProvider);
+      ref.invalidate(contribuicaoMatrizProvider);
 
       setState(() {
         _preencherFormComJogador(salvo);
