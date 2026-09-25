@@ -42,6 +42,8 @@ public class Jogador {
     private Boolean estaSuspenso;
     private Boolean estaAutorizado;
     private Boolean mensalidadeEmDia;
+    // false = excluído com histórico (inativado); só volta pelo botão Reativar
+    private Boolean ativo;
 
     // Estatísticas Iniciais
     private Integer golsIniciais;
@@ -259,6 +261,14 @@ public class Jogador {
 
     public void setMensalidadeEmDia(Boolean mensalidadeEmDia) {
         this.mensalidadeEmDia = mensalidadeEmDia;
+    }
+
+    public Boolean getAtivo() {
+        return ativo != null ? ativo : true;
+    }
+
+    public void setAtivo(Boolean ativo) {
+        this.ativo = ativo;
     }
 
     public Integer getGolsIniciais() {

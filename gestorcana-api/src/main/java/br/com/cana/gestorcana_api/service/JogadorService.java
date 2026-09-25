@@ -90,7 +90,9 @@ public class JogadorService {
         }
 
         j.setNome(TextoUtil.normalizar(j.getNome()));
-        j.setAtivo(true); // só jogadores ativos aparecem para cadastro/edição
+        // Os apps não mandam "ativo": mantém o que está no banco (reativar é pelo
+        // endpoint próprio, não por edição)
+        j.setAtivo(jogadorRepository.findById(j.getId()).map(Jogador::getAtivo).orElse(true));
         normalizarEndereco(j.getEndereco());
 
         try {
@@ -150,6 +152,17 @@ public class JogadorService {
      * Filtra jogadores por status (ATIVO, SUSPENSO, etc).
      */
     public List<Jogador> filtrarPorStatus(String status) {
+        return filtrarPorStatus(status, false);
+    }
+
+    /**
+     * Com incluirInativos=true, traz também os excluídos com histórico (usado só
+     * na pesquisa de jogadores, para permitir reativar).
+     */
+    public List<Jogador> filtrarPorStatus(String status, boolean incluirInativos) {
+        if (incluirInativos) {
+            return jogadorRepository.findAll();
+        }
         if (status == null || status.trim().isEmpty()) {
             return listarAtivos();
         }
@@ -284,6 +297,29 @@ public class JogadorService {
         } catch (Exception ex) {
             return "Não foi possível excluir o jogador: " + ex.getMessage();
         }
+    }
+
+    public String reativar(int id) {
+        Optional<Jogador> opt = jogadorRepository.findById(id);
+        if (opt.isEmpty()) {
+            return "Jogador não encontrado.";
+        }
+        Jogador jogador = opt.get();
+        if (jogador.getAtivo()) {
+            return "OK";
+        }
+
+        // A camisa ficou livre enquanto ele estava inativo: se outro jogador pegou,
+        // ele volta sem número em vez de duplicar.
+        String aviso = "";
+        if (isNumeroCamisaEmUso(jogador.getNumCamisa(), jogador.getId())) {
+            aviso = " A camisa " + jogador.getNumCamisa() + " já pertence a outro jogador, então ele voltou sem número.";
+            jogador.setNumCamisa(null);
+        }
+
+        jogador.setAtivo(true);
+        jogadorRepository.save(jogador);
+        return "OK" + aviso;
     }
 
     public String obterNomeAtivo(String texto) {

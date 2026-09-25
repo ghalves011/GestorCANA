@@ -20,6 +20,7 @@ public class DialogBuscaView extends JDialog {
     private List<Jogador> todosJogadores;
     private List<Jogador> listaFiltrada;
     private Jogador jogadorSelecionado;
+    private JCheckBox chkInativos;
 
     public DialogBuscaView(Frame parent) {
         super(parent, "Busca de Jogadores", true);
@@ -36,6 +37,10 @@ public class DialogBuscaView extends JDialog {
         txtBusca = new JTextField();
         painelBusca.add(new JLabel("Busca (Nome ou CPF): "), BorderLayout.WEST);
         painelBusca.add(txtBusca, BorderLayout.CENTER);
+        chkInativos = new JCheckBox("Mostrar inativos");
+        chkInativos.setFocusable(false);
+        chkInativos.addActionListener(e -> carregarJogadores());
+        painelBusca.add(chkInativos, BorderLayout.EAST);
 
         add(painelBusca, BorderLayout.NORTH);
 
@@ -48,6 +53,22 @@ public class DialogBuscaView extends JDialog {
         };
         tabela = new JTable(modelo);
         tabela.setFocusable(false);
+
+        // Inativos em cinza e itálico
+        tabela.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                boolean inativo = listaFiltrada != null && row < listaFiltrada.size()
+                        && !listaFiltrada.get(table.convertRowIndexToModel(row)).getAtivo();
+                c.setFont(c.getFont().deriveFont(inativo ? Font.ITALIC : Font.PLAIN));
+                if (!isSelected) {
+                    c.setForeground(inativo ? Color.GRAY : table.getForeground());
+                }
+                return c;
+            }
+        });
 
         // Coluna 0 (Nome): Tamanho grande
         tabela.getColumnModel().getColumn(0).setPreferredWidth(400);
@@ -78,21 +99,7 @@ public class DialogBuscaView extends JDialog {
         add(btnSelecionar, BorderLayout.SOUTH);
 
         // Carregar dados iniciais via API Spring Boot
-        try {
-            String json = ApiClient.get("/jogadores");
-
-            java.lang.reflect.Type type = new TypeToken<List<Jogador>>() {
-            }.getType();
-
-            todosJogadores = ApiClient.GSON.fromJson(json, type);
-
-            if (todosJogadores != null) {
-                atualizarTabela(todosJogadores);
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Erro ao carregar lista de jogadores da API: " + ex.getMessage(),
-                    "Erro de Conexão", JOptionPane.ERROR_MESSAGE);
-        }
+        carregarJogadores();
 
         // Evento de filtro em tempo real
         txtBusca.addKeyListener(new java.awt.event.KeyAdapter() {
@@ -100,6 +107,24 @@ public class DialogBuscaView extends JDialog {
                 filtrar();
             }
         });
+    }
+
+    private void carregarJogadores() {
+        try {
+            String json = ApiClient.get(chkInativos.isSelected() ? "/jogadores?incluirInativos=true" : "/jogadores");
+
+            java.lang.reflect.Type type = new TypeToken<List<Jogador>>() {
+            }.getType();
+
+            todosJogadores = ApiClient.GSON.fromJson(json, type);
+
+            if (todosJogadores != null) {
+                filtrar(); // mantém o texto já digitado na busca
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao carregar lista de jogadores da API: " + ex.getMessage(),
+                    "Erro de Conexão", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void atualizarTabela(List<Jogador> lista) {
@@ -119,7 +144,7 @@ public class DialogBuscaView extends JDialog {
         if (lista != null) {
             for (Jogador j : lista) {
                 modelo.addRow(new Object[] {
-                        j.getNome(),
+                        j.getAtivo() ? j.getNome() : j.getNome() + " (INATIVO)",
                         j.getApelido(),
                         FormatadorUtil.mascaraCPF(j.getCpf())
                 });

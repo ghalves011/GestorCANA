@@ -14,7 +14,7 @@ public class FormJogadorView extends JFrame {
     private Jogador jogadorAtual = new Jogador();
 
     // Toolbar
-    private JButton btnGravar, btnCancelar, btnAlterar, btnNovo, btnExcluir, btnPesquisa;
+    private JButton btnGravar, btnCancelar, btnAlterar, btnNovo, btnExcluir, btnReativar, btnPesquisa;
 
     // Aba 1 - Infos Pessoais
     private JTextField txtNome, txtApelido, txtLogradouro, txtNum, txtComplemento, txtBairro, txtCidade, txtUF;
@@ -66,6 +66,8 @@ public class FormJogadorView extends JFrame {
         btnAlterar = criarBotaoToolbar("Alterar");
         btnNovo = criarBotaoToolbar("Novo");
         btnExcluir = criarBotaoToolbar("Excluir");
+        btnReativar = criarBotaoToolbar("Reativar");
+        btnReativar.setVisible(false); // só aparece no lugar do Excluir para inativos
         btnPesquisa = criarBotaoToolbar("Pesquisa");
 
         toolbar.add(btnGravar);
@@ -73,6 +75,7 @@ public class FormJogadorView extends JFrame {
         toolbar.add(btnAlterar);
         toolbar.add(btnNovo);
         toolbar.add(btnExcluir);
+        toolbar.add(btnReativar);
         toolbar.add(btnPesquisa);
 
         add(toolbar, BorderLayout.NORTH);
@@ -84,6 +87,7 @@ public class FormJogadorView extends JFrame {
         btnAlterar.addActionListener(e -> bloquearCampos(false));
         btnCancelar.addActionListener(e -> bloquearCampos(true));
         btnExcluir.addActionListener(e -> acaoExcluir());
+        btnReativar.addActionListener(e -> acaoReativar());
     }
 
     private JPanel criarPainelPessoais() {
@@ -304,7 +308,8 @@ public class FormJogadorView extends JFrame {
             this.jogadorAtual = escolhido;
             carregarPadrinhos();
             preencherCampos();
-            bloquearCampos(false);
+            // Inativo fica só para consulta até ser reativado
+            bloquearCampos(!escolhido.getAtivo());
         }
     }
 
@@ -330,6 +335,39 @@ public class FormJogadorView extends JFrame {
                 JOptionPane.showMessageDialog(this, "Erro ao excluir jogador na API: " + ex.getMessage(), "Erro",
                         JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    private void acaoReativar() {
+        Integer id = jogadorAtual.getId();
+        if (id == null || id == 0) {
+            return;
+        }
+
+        int confirma = JOptionPane.showConfirmDialog(this,
+                "Reativar " + jogadorAtual.getNome() + "? Ele volta para o cadastro, contribuições e escalação.",
+                "Confirmação", JOptionPane.YES_NO_OPTION);
+        if (confirma != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            String resposta = ApiClient.put("/jogadores/" + id + "/reativar", "");
+            if (resposta == null || !resposta.startsWith("Jogador reativado")) {
+                JOptionPane.showMessageDialog(this, "Erro ao reativar jogador: " + resposta, "Erro",
+                        JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Recarrega do banco (a camisa pode ter sido liberada na reativação)
+            jogadorAtual = ApiClient.GSON.fromJson(ApiClient.get("/jogadores/" + id), Jogador.class);
+            carregarPadrinhos();
+            preencherCampos();
+            bloquearCampos(true);
+            JOptionPane.showMessageDialog(this, resposta);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao reativar jogador na API: " + ex.getMessage(), "Erro",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -513,6 +551,13 @@ public class FormJogadorView extends JFrame {
         btnNovo.setEnabled(bloquear);
         btnPesquisa.setEnabled(bloquear);
         btnExcluir.setEnabled(bloquear);
+
+        // Jogador inativo: só consulta; Reativar ocupa o lugar do Excluir
+        boolean inativo = jogadorAtual != null && !jogadorAtual.getAtivo();
+        btnAlterar.setEnabled(bloquear && !inativo);
+        btnExcluir.setVisible(!inativo);
+        btnReativar.setVisible(inativo);
+        btnReativar.setEnabled(bloquear);
     }
 
     // Método recursivo auxiliar para não repetir código

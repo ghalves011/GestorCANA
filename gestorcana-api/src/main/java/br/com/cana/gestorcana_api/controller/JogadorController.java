@@ -20,8 +20,9 @@ public class JogadorController {
 
     // ÚNICO MÉTODO LISTAR (Delega para a Service)
     @GetMapping({"", "/"})
-    public List<Jogador> listar(@RequestParam(required = false) String status) {
-        return jogadorService.filtrarPorStatus(status);
+    public List<Jogador> listar(@RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "false") boolean incluirInativos) {
+        return jogadorService.filtrarPorStatus(status, incluirInativos);
     }
 
     @GetMapping("/{id:\\d+}")
@@ -67,6 +68,16 @@ public class JogadorController {
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resultado);
         }
+    }
+
+    @PutMapping("/{id:\\d+}/reativar")
+    public ResponseEntity<String> reativar(@PathVariable Integer id) {
+        String resultado = jogadorService.reativar(id);
+        if (resultado.startsWith("OK")) {
+            String aviso = resultado.substring(2).trim();
+            return ResponseEntity.ok(aviso.isEmpty() ? "Jogador reativado com sucesso." : "Jogador reativado. " + aviso);
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resultado);
     }
 
     @PostMapping("/buscar-por-nome")
