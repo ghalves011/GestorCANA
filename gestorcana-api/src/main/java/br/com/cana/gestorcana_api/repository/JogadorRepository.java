@@ -20,6 +20,8 @@ public interface JogadorRepository extends JpaRepository<Jogador, Integer> {
 
     List<Jogador> findByNomeIgnoreCase(String nome);
 
+    List<Jogador> findByPadrinhoId(Integer padrinhoId);
+
     Optional<Jogador> findByCpf(String cpf);
 
     Optional<Jogador> findByRg(String rg);

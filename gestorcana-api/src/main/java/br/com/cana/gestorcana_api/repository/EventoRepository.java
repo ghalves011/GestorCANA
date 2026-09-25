@@ -13,6 +13,8 @@ public interface EventoRepository extends JpaRepository<Evento, Integer> {
 
     List<Evento> findByJogadorId(Integer jogadorId);
 
+    boolean existsByJogadorId(Integer jogadorId);
+
     int countByJogadorIdAndTipo(Integer jogadorId, String tipo);
 
     int countByJogadorIdAndTipoEvento(Integer jogadorId, String tipoEvento);

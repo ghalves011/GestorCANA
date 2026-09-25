@@ -53,7 +53,9 @@ public class ContribuicaoService {
     }
 
     public String gerarLoteAnual(int ano, double valor) {
-        List<Jogador> jogadores = jogadorRepository.findAll();
+        List<Jogador> jogadores = jogadorRepository.findAll().stream()
+                .filter(Jogador::getAtivo)
+                .collect(java.util.stream.Collectors.toList());
         if (jogadores == null || jogadores.isEmpty()) {
             return "Nenhum jogador cadastrado para gerar o lote.";
         }
@@ -187,6 +189,11 @@ public class ContribuicaoService {
         String buscaLimpa = (busca != null) ? busca.trim().toLowerCase() : "";
 
         for (Jogador j : jogadores) {
+            // Inativo some da tela, mas as contribuições dele continuam no banco
+            if (!j.getAtivo()) {
+                continue;
+            }
+
             String nomeExibir = (j.getApelido() != null && !j.getApelido().trim().isEmpty())
                     ? j.getApelido().trim()
                     : (j.getNome() != null ? j.getNome().trim() : "Jogador " + j.getId());

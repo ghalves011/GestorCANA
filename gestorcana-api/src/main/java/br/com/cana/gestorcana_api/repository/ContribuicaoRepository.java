@@ -18,6 +18,8 @@ public interface ContribuicaoRepository extends JpaRepository<Contribuicao, Inte
 
     List<Contribuicao> findByAno(Integer ano);
 
+    boolean existsByJogadorIdAndPago(Integer jogadorId, Integer pago);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId AND c.mes = :mes AND c.ano = :ano")
@@ -25,6 +27,6 @@ public interface ContribuicaoRepository extends JpaRepository<Contribuicao, Inte
 
     @Transactional
     @Modifying
-    @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId")
-    void deletarPorJogador(@Param("jogadorId") Integer jogadorId);
+    @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId AND (c.pago IS NULL OR c.pago <> 1)")
+    void deletarPendentesPorJogador(@Param("jogadorId") Integer jogadorId);
 }

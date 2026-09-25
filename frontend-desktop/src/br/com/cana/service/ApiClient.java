@@ -110,6 +110,13 @@ public class ApiClient {
                 .DELETE()
                 .build();
 
-        client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        // Sem isso, uma recusa da API (ex.: 400 "jogador possui partidas") passava
+        // como sucesso e a tela dizia "Excluído" sem nada ter sido excluído.
+        if (response.statusCode() >= 300) {
+            String corpo = response.body();
+            throw new Exception(corpo != null && !corpo.isBlank() ? corpo : "HTTP " + response.statusCode());
+        }
     }
 }

@@ -26,10 +26,7 @@ public class JogadorController {
 
     @GetMapping("/{id:\\d+}")
     public ResponseEntity<Jogador> buscarPorId(@PathVariable Integer id) {
-        Jogador jogador = jogadorService.listarTodos().stream()
-                .filter(j -> j.getId().equals(id))
-                .findFirst()
-                .orElse(null);
+        Jogador jogador = jogadorService.buscarPorId(id).orElse(null);
         return jogador != null ? ResponseEntity.ok(jogador) : ResponseEntity.notFound().build();
     }
 

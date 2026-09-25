@@ -72,6 +72,11 @@ public class Jogador {
     @Column(name = "cvermelhosiniciais")
     private Integer cVermelhosIniciais = 0;
 
+    // Exclusão lógica: jogador com partidas no histórico não pode sair do banco
+    // (FK de jogadorpartida), então "excluir" só o esconde das listagens.
+    @Column(name = "ativo", columnDefinition = "boolean default true")
+    private Boolean ativo = true;
+
     // Relacionamento otimizado para evitar estouro de proxy e consultas extras
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "id_endereco", referencedColumnName = "id")
@@ -158,6 +163,9 @@ public class Jogador {
 
     public Integer getcVermelhosIniciais() { return cVermelhosIniciais != null ? cVermelhosIniciais : 0; }
     public void setcVermelhosIniciais(Integer cVermelhosIniciais) { this.cVermelhosIniciais = cVermelhosIniciais; }
+
+    public Boolean getAtivo() { return ativo != null ? ativo : true; }
+    public void setAtivo(Boolean ativo) { this.ativo = ativo; }
 
     public Endereco getEndereco() { return endereco; }
     public void setEndereco(Endereco endereco) { this.endereco = endereco; }

@@ -561,7 +561,9 @@ public class PartidaService {
     public List<Jogador> obterAtrasadosDisponiveisOrdenados(Partida partida) {
         List<Jogador> disponiveisDeFato = new ArrayList<>();
         try {
-            List<Jogador> todosAtivos = jogadorRepository.findAll();
+            List<Jogador> todosAtivos = jogadorRepository.findAll().stream()
+                    .filter(Jogador::getAtivo)
+                    .collect(java.util.stream.Collectors.toList());
 
             for (Jogador j : todosAtivos) {
                 String nomeJ = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido()
@@ -733,13 +735,18 @@ public class PartidaService {
             return null;
         List<Jogador> porApelido = jogadorRepository.findByApelidoIgnoreCase(nome.trim());
         if (!porApelido.isEmpty()) {
-            return porApelido.get(0);
+            return preferirAtivo(porApelido);
         }
         List<Jogador> porNome = jogadorRepository.findByNomeIgnoreCase(nome.trim());
         if (!porNome.isEmpty()) {
-            return porNome.get(0);
+            return preferirAtivo(porNome);
         }
         return null;
+    }
+
+    // Um jogador inativo pode ter o mesmo apelido/nome de um jogador atual
+    private Jogador preferirAtivo(List<Jogador> candidatos) {
+        return candidatos.stream().filter(Jogador::getAtivo).findFirst().orElse(candidatos.get(0));
     }
 
     // --- MÉTODO PARA ALIMENTAR A TELA DE ESTATÍSTICAS DO SWING ---
@@ -772,6 +779,11 @@ public class PartidaService {
                     cv += jp.getCartaoVermelho() != null ? jp.getCartaoVermelho() : 0;
                     jogosPresente++;
                 }
+            }
+
+            // Inativo só aparece nas temporadas em que jogou (preserva o histórico)
+            if (!j.getAtivo() && jogosPresente == 0) {
+                continue;
             }
 
             String presenca = "0%";

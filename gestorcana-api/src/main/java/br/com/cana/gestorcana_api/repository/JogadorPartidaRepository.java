@@ -14,6 +14,8 @@ public interface JogadorPartidaRepository extends JpaRepository<JogadorPartida, 
 
     List<JogadorPartida> findByJogadorId(Integer jogadorId);
 
+    boolean existsByJogadorId(Integer jogadorId);
+
     Optional<JogadorPartida> findByJogadorIdAndPartidaId(Integer jogadorId, Integer partidaId);
 
     void deleteByPartidaId(Integer partidaId);

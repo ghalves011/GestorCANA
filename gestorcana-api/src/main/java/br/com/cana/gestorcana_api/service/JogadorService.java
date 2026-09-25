@@ -4,6 +4,7 @@ import br.com.cana.gestorcana_api.entity.Endereco;
 import br.com.cana.gestorcana_api.entity.Jogador;
 import br.com.cana.gestorcana_api.repository.ContribuicaoRepository;
 import br.com.cana.gestorcana_api.repository.EnderecoRepository;
+import br.com.cana.gestorcana_api.repository.EventoRepository;
 import br.com.cana.gestorcana_api.repository.JogadorRepository;
 import br.com.cana.gestorcana_api.repository.JogadorPartidaRepository;
 import br.com.cana.gestorcana_api.util.TextoUtil;
@@ -33,6 +34,9 @@ public class JogadorService {
     private ContribuicaoRepository contribuicaoRepository;
 
     @Autowired
+    private EventoRepository eventoRepository;
+
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     public JogadorService() {
@@ -57,6 +61,7 @@ public class JogadorService {
         }
 
         j.setNome(TextoUtil.normalizar(j.getNome()));
+        j.setAtivo(true); // só jogadores ativos aparecem para cadastro/edição
         normalizarEndereco(j.getEndereco());
 
         try {
@@ -85,6 +90,7 @@ public class JogadorService {
         }
 
         j.setNome(TextoUtil.normalizar(j.getNome()));
+        j.setAtivo(true); // só jogadores ativos aparecem para cadastro/edição
         normalizarEndereco(j.getEndereco());
 
         try {
@@ -117,7 +123,7 @@ public class JogadorService {
      * Busca todos os jogadores cadastrados.
      */
     public List<Jogador> listarTodos() {
-        List<Jogador> todos = jogadorRepository.findAll();
+        List<Jogador> todos = listarAtivos();
         for (Jogador j : todos) {
             // Trava para evitar null pointer ou falso inadimplente
             if (j.getMensalidadeEmDia() == null) {
@@ -135,7 +141,7 @@ public class JogadorService {
      * de si mesmo).
      */
     public List<Jogador> buscarPadrinhos(int idAtual) {
-        return jogadorRepository.findAll().stream()
+        return listarAtivos().stream()
                 .filter(j -> j.getId() != null && j.getId() != idAtual)
                 .collect(Collectors.toList());
     }
@@ -145,19 +151,34 @@ public class JogadorService {
      */
     public List<Jogador> filtrarPorStatus(String status) {
         if (status == null || status.trim().isEmpty()) {
-            return jogadorRepository.findAll();
+            return listarAtivos();
         }
-        return jogadorRepository.findAll().stream()
+        return listarAtivos().stream()
                 .filter(j -> j.getStatus() != null && j.getStatus().equalsIgnoreCase(status.trim()))
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Busca por ID incluindo inativos (partidas antigas ainda referenciam eles).
+     */
+    public Optional<Jogador> buscarPorId(int id) {
+        return jogadorRepository.findById(id);
+    }
+
     // --- MÉTODOS PRIVADOS E AUXILIARES ---
+
+    /** Jogadores inativos (excluídos com histórico) ficam fora de todas as listagens. */
+    private List<Jogador> listarAtivos() {
+        return jogadorRepository.findAll().stream()
+                .filter(Jogador::getAtivo)
+                .collect(Collectors.toList());
+    }
 
     private boolean isNumeroCamisaEmUso(Integer numCamisa, Integer idJogador) {
         if (numCamisa == null)
             return false;
-        List<Jogador> todos = jogadorRepository.findAll();
+        // Camisa de jogador inativo fica livre para outro usar
+        List<Jogador> todos = listarAtivos();
         for (Jogador j : todos) {
             if (Objects.equals(j.getNumCamisa(), numCamisa)) {
                 if (idJogador == null || !Objects.equals(j.getId(), idJogador)) {
@@ -234,18 +255,34 @@ public class JogadorService {
             return "Jogador não encontrado.";
         }
 
+        Jogador jogador = opt.get();
+        boolean temHistorico = jogadorPartidaRepository.existsByJogadorId(id)
+                || eventoRepository.existsByJogadorId(id)
+                || contribuicaoRepository.existsByJogadorIdAndPago(id, 1);
+
         try {
-            // Contribuicao não tem FK para jogador: sem apagar as cobranças junto, elas
-            // ficariam órfãs no banco. Tudo numa transação só — se o jogador não puder
-            // ser excluído (ex.: tem partidas), as cobranças são restauradas.
+            if (temHistorico) {
+                // Partidas, eventos e mensalidades pagas precisam continuar no histórico
+                // (e o banco tem FK para jogador): só some das listagens.
+                jogador.setAtivo(false);
+                jogadorRepository.save(jogador);
+                return "OK";
+            }
+
+            // Sem histórico: exclusão de verdade, levando junto as cobranças pendentes
+            // e o vínculo de padrinho dos afilhados (ambos com FK para jogador).
             transactionTemplate.executeWithoutResult(status -> {
-                contribuicaoRepository.deletarPorJogador(id);
+                for (Jogador afilhado : jogadorRepository.findByPadrinhoId(id)) {
+                    afilhado.setPadrinhoId(null);
+                    jogadorRepository.save(afilhado);
+                }
+                contribuicaoRepository.deletarPendentesPorJogador(id);
                 jogadorRepository.deleteById(id);
                 jogadorRepository.flush();
             });
             return "OK";
         } catch (Exception ex) {
-            return "Não foi possível excluir o jogador. Verifique se ele possui partidas ou mensalidades registradas.";
+            return "Não foi possível excluir o jogador: " + ex.getMessage();
         }
     }
 
@@ -321,7 +358,9 @@ public class JogadorService {
             return null;
         }
         String busca = nomeOuApelido.trim();
+        // Ativos primeiro: um inativo pode ter o mesmo apelido de um jogador atual
         return jogadorRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing((Jogador j) -> !j.getAtivo()))
                 .filter(j -> (j.getApelido() != null && j.getApelido().equalsIgnoreCase(busca))
                         || (j.getNome() != null && j.getNome().equalsIgnoreCase(busca)))
                 .findFirst()
