@@ -120,8 +120,39 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
       setState(() {
         _preencherFormComJogador(selecionado);
         _snapshotParaCancelar = selecionado;
-        _locked = false;
+        // Inativo fica só para consulta até ser reativado
+        _locked = !selecionado.ativo;
       });
+    }
+  }
+
+  Future<void> _reativar() async {
+    final int? id = _jogadorAtual.id;
+    if (id == null) return;
+    final bool confirmado = await showConfirmDialog(
+      context,
+      title: 'Reativar jogador',
+      message: 'Reativar ${_jogadorAtual.nomeExibir}? Ele volta para o cadastro, contribuições e escalação.',
+    );
+    if (!confirmado) return;
+
+    try {
+      final String resultado = await ref.read(jogadorRepositoryProvider).reativar(id);
+      ref.invalidate(todosJogadoresProvider);
+      ref.invalidate(jogadoresComInativosProvider);
+      ref.invalidate(contribuicaoMatrizProvider);
+      final Jogador atualizado = await ref.read(jogadorRepositoryProvider).obterPorId(id);
+      if (!mounted) return;
+      setState(() {
+        _preencherFormComJogador(atualizado);
+        _snapshotParaCancelar = atualizado;
+        _locked = true;
+      });
+      await showMessageDialog(context, title: 'Reativação', message: resultado);
+    } catch (e) {
+      if (mounted) {
+        await showMessageDialog(context, title: 'Erro', message: e is ApiException ? e.message : e.toString());
+      }
     }
   }
 
@@ -228,9 +259,9 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
           IconButton(icon: const Icon(Icons.search), tooltip: 'Pesquisa', onPressed: _pesquisar),
           if (!_locked)
             IconButton(icon: const Icon(Icons.add), tooltip: 'Novo', onPressed: _novo),
-          if (_locked)
+          if (_locked && _jogadorAtual.ativo)
             IconButton(icon: const Icon(Icons.edit), tooltip: 'Alterar', onPressed: _alterar),
-          if (_jogadorAtual.id != null)
+          if (_jogadorAtual.id != null && _jogadorAtual.ativo)
             IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Excluir', onPressed: _excluir),
         ],
         bottom: TabBar(
@@ -299,7 +330,15 @@ class _PlayerFormScreenState extends ConsumerState<PlayerFormScreen> with Single
                         : const Text('GRAVAR'),
                   ),
                 ),
-              ] else
+              ] else if (!_jogadorAtual.ativo)
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _reativar,
+                    icon: const Icon(Icons.restore),
+                    label: const Text('REATIVAR'),
+                  ),
+                )
+              else
                 const Expanded(
                   child: Text(
                     'Toque em Alterar para editar, ou Pesquisa para carregar outro jogador.',

@@ -19,11 +19,14 @@ class JogadorRepository {
   /// auto-decode must be disabled or it throws on the raw body.
   Options get _plainText => Options(responseType: ResponseType.plain);
 
-  Future<List<Jogador>> listar({String? status}) async {
+  Future<List<Jogador>> listar({String? status, bool incluirInativos = false}) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
         '/jogadores',
-        queryParameters: status == null ? null : <String, dynamic>{'status': status},
+        queryParameters: <String, dynamic>{
+          if (status != null) 'status': status,
+          if (incluirInativos) 'incluirInativos': true,
+        },
       );
       final List<dynamic> data = response.data as List<dynamic>;
       return data.whereType<Map<String, dynamic>>().map(Jogador.fromJson).toList();
@@ -65,6 +68,17 @@ class JogadorRepository {
   Future<String> excluir(int id) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>('/jogadores/$id', options: _plainText);
+      return unwrapQuotedString(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  /// Volta um jogador inativado para as listagens. Retorna a mensagem da API
+  /// (pode avisar que a camisa dele ficou com outro jogador).
+  Future<String> reativar(int id) async {
+    try {
+      final Response<dynamic> response = await _dio.put<dynamic>('/jogadores/$id/reativar', options: _plainText);
       return unwrapQuotedString(response.data);
     } on DioException catch (e) {
       throw ApiException.fromDioException(e);

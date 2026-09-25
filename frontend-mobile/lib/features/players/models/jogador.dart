@@ -33,6 +33,7 @@ class Jogador {
     this.golsIniciais = 0,
     this.cAmarelosIniciais = 0,
     this.cVermelhosIniciais = 0,
+    this.ativo = true,
     Endereco? endereco,
   }) : endereco = endereco ?? Endereco.vazio();
 
@@ -61,6 +62,10 @@ class Jogador {
   int golsIniciais;
   int cAmarelosIniciais;
   int cVermelhosIniciais;
+
+  /// false = excluído com histórico (inativado). Só vem da API; não vai no
+  /// toJson — reativar é pelo endpoint próprio.
+  bool ativo;
   Endereco endereco;
 
   /// Derived client-side too, matching the backend's transient `status`
@@ -101,6 +106,7 @@ class Jogador {
       golsIniciais: parseFlexibleInt(json['golsIniciais']),
       cAmarelosIniciais: parseFlexibleInt(json['cAmarelosIniciais']),
       cVermelhosIniciais: parseFlexibleInt(json['cVermelhosIniciais']),
+      ativo: json['ativo'] == null ? true : parseFlexibleBool(json['ativo']),
       endereco: enderecoJson is Map<String, dynamic> ? Endereco.fromJson(enderecoJson) : Endereco.vazio(),
     );
   }

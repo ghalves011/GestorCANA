@@ -23,6 +23,7 @@ class PlayerSearchScreen extends ConsumerStatefulWidget {
 class _PlayerSearchScreenState extends ConsumerState<PlayerSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  bool _mostrarInativos = false;
 
   @override
   void dispose() {
@@ -32,7 +33,8 @@ class _PlayerSearchScreenState extends ConsumerState<PlayerSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<List<Jogador>> async = ref.watch(todosJogadoresProvider);
+    final AsyncValue<List<Jogador>> async =
+        ref.watch(_mostrarInativos ? jogadoresComInativosProvider : todosJogadoresProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pesquisar Jogador')),
@@ -50,11 +52,24 @@ class _PlayerSearchScreenState extends ConsumerState<PlayerSearchScreen> {
               onChanged: (String value) => setState(() => _query = value),
             ),
           ),
+          SwitchListTile(
+            dense: true,
+            title: const Text('Mostrar inativos'),
+            value: _mostrarInativos,
+            onChanged: (bool v) {
+              // Sempre busca de novo: alguém pode ter sido excluído/reativado
+              if (v) ref.invalidate(jogadoresComInativosProvider);
+              setState(() => _mostrarInativos = v);
+            },
+          ),
           Expanded(
             child: async.when(
               loading: () => const LoadingView(),
-              error: (Object error, StackTrace stackTrace) =>
-                  ErrorView(error: error, onRetry: () => ref.invalidate(todosJogadoresProvider)),
+              error: (Object error, StackTrace stackTrace) => ErrorView(
+                error: error,
+                onRetry: () =>
+                    ref.invalidate(_mostrarInativos ? jogadoresComInativosProvider : todosJogadoresProvider),
+              ),
               data: (List<Jogador> jogadores) {
                 final List<Jogador> filtrados = filterBySubstring<Jogador>(
                   jogadores,
@@ -75,17 +90,21 @@ class _PlayerSearchScreenState extends ConsumerState<PlayerSearchScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (BuildContext context, int index) {
                     final Jogador jogador = filtrados[index];
+                    final Color? corInativo = jogador.ativo ? null : Theme.of(context).disabledColor;
                     return ListTile(
-                      title: Text(jogador.nomeExibir),
+                      title: Text(jogador.nomeExibir, style: TextStyle(color: corInativo)),
                       subtitle: Text(
                         <String>[
                           if (jogador.nome != jogador.nomeExibir) jogador.nome,
                           if ((jogador.cpf ?? '').isNotEmpty) CpfUtils.mask(jogador.cpf!),
                         ].join(' · '),
                       ),
-                      trailing: jogador.estaSuspenso
-                          ? const Chip(label: Text('Suspenso'), visualDensity: VisualDensity.compact)
-                          : null,
+                      subtitleTextStyle: corInativo == null ? null : TextStyle(color: corInativo),
+                      trailing: !jogador.ativo
+                          ? const Chip(label: Text('Inativo'), visualDensity: VisualDensity.compact)
+                          : jogador.estaSuspenso
+                              ? const Chip(label: Text('Suspenso'), visualDensity: VisualDensity.compact)
+                              : null,
                       onTap: () => Navigator.of(context).pop(jogador),
                     );
                   },

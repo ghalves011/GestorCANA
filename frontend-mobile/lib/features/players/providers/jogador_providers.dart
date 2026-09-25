@@ -14,6 +14,11 @@ final FutureProvider<List<Jogador>> todosJogadoresProvider = FutureProvider<List
   return ref.watch(jogadorRepositoryProvider).listar();
 });
 
+/// Ativos + inativos: só para a pesquisa com "Mostrar inativos" ligado.
+final FutureProvider<List<Jogador>> jogadoresComInativosProvider = FutureProvider<List<Jogador>>((Ref ref) {
+  return ref.watch(jogadorRepositoryProvider).listar(incluirInativos: true);
+});
+
 final jogadoresPorStatusProvider = FutureProvider.family<List<Jogador>, String>((Ref ref, String status) {
   return ref.watch(jogadorRepositoryProvider).listar(status: status);
 });
