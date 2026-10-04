@@ -38,3 +38,32 @@ String activeTokensText(String cellText) {
 List<String> activeTokens(String cellText) {
   return activeTokensText(cellText).split(' ').where((String t) => t.trim().isNotEmpty).toList();
 }
+
+/// Score recomputed from both teams' event cells: "⚽" counts for the
+/// player's own team, "⚽(C)" (own goal) for the opponent. Used after edits
+/// that drop events (removed player, undone substitution) so the scoreboard
+/// never drifts from what's actually recorded.
+({int azul, int vermelho}) calcularPlacar(Iterable<String> eventosAzul, Iterable<String> eventosVermelho) {
+  ({int gols, int contra}) contar(Iterable<String> eventos) {
+    int gols = 0;
+    int contra = 0;
+    for (final String ev in eventos) {
+      final int contraNoBloco = '⚽(C)'.allMatches(ev).length;
+      contra += contraNoBloco;
+      gols += '⚽'.allMatches(ev).length - contraNoBloco;
+    }
+    return (gols: gols, contra: contra);
+  }
+
+  final ({int gols, int contra}) azul = contar(eventosAzul);
+  final ({int gols, int contra}) vermelho = contar(eventosVermelho);
+  return (azul: azul.gols + vermelho.contra, vermelho: vermelho.gols + azul.contra);
+}
+
+/// Drops the last " / " block of a slot's names or events text — undoing
+/// its latest substitution ("J1 / J2" -> "J1", "⚽ / 🟨" -> "⚽").
+String removerUltimoBloco(String texto, {int? manterBlocos}) {
+  final List<String> blocos = texto.split(' / ');
+  final int manter = manterBlocos ?? blocos.length - 1;
+  return blocos.take(manter.clamp(0, blocos.length)).join(' / ');
+}

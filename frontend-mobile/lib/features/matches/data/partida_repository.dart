@@ -350,6 +350,71 @@ class PartidaRepository {
     }
   }
 
+  /// Removes a wrongly-drawn player from the match: the backend takes them
+  /// out of listaGeralPresenca and moves the next bench player (by arrival
+  /// order — next goalkeeper for a GOL slot, next outfield player otherwise)
+  /// into their slot. [substituto] is null when nobody on the bench fits,
+  /// in which case the slot is left empty.
+  Future<({Partida partida, Jogador? substituto})> removerEscalado({
+    required Partida partida,
+    required String nomeJogador,
+    required String time,
+    required String posicao,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.post<dynamic>(
+        '/partidas/remover-escalado',
+        data: jsonEncode(<String, dynamic>{
+          'partida': partida.toJson(),
+          'nomeJogador': nomeJogador,
+          'time': time,
+          'posicao': posicao,
+        }),
+        options: _jsonBody,
+      );
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final dynamic substituto = data['substituto'];
+      return (
+        partida: Partida.fromJson(data['partida'] as Map<String, dynamic>),
+        substituto: substituto is Map<String, dynamic> ? Jogador.fromJson(substituto) : null,
+      );
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// Rewrites an already-finalized match (PUT /partidas/{id}). The backend
+  /// re-derives the per-player stats from the grids and only applies the
+  /// card difference to suspensions (cards already served stay cleared).
+  Future<bool> editar({
+    required Partida partida,
+    required List<List<dynamic>> gridAzul,
+    required List<List<dynamic>> gridVermelho,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.put<dynamic>(
+        '/partidas/${partida.id}',
+        data: <String, dynamic>{
+          'partida': partida.toJson(),
+          'gridAzul': gridAzul,
+          'gridVermelho': gridVermelho,
+        },
+      );
+      return parseFlexibleBool(response.data);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// Deletes a finalized match along with its per-player stats.
+  Future<void> excluir(int id) async {
+    try {
+      await _dio.delete<dynamic>('/partidas/$id', options: _plainText);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
   // --- JogadorPartidaController --------------------------------------------
 
   Future<List<JogadorPartida>> listarJogadorPartidas() async {

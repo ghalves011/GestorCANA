@@ -38,4 +38,39 @@ void main() {
       expect(activeTokens('João (ATA)'), isEmpty);
     });
   });
+
+  group('calcularPlacar', () {
+    test('goals count for the own team, own goals for the opponent', () {
+      final ({int azul, int vermelho}) placar = calcularPlacar(
+        <String>['⚽ ⚽ 🟨', '⚽(C)', ''],
+        <String>['⚽ / ⚽', '⚽(C) ⚽(C)'],
+      );
+      expect(placar.azul, 4);
+      expect(placar.vermelho, 3);
+    });
+
+    test('is zero with no events', () {
+      final ({int azul, int vermelho}) placar = calcularPlacar(<String>[''], <String>[]);
+      expect(placar.azul, 0);
+      expect(placar.vermelho, 0);
+    });
+  });
+
+  group('removerUltimoBloco', () {
+    test('undoes the latest substitution of a names cell', () {
+      expect(removerUltimoBloco('J1 / J2'), 'J1');
+      expect(removerUltimoBloco('J1 / J2 / J3'), 'J1 / J2');
+    });
+
+    test('keeps the outgoing player events, even when the new block is empty', () {
+      expect(removerUltimoBloco('⚽ 🟨 / ⚽'), '⚽ 🟨');
+      expect(removerUltimoBloco('⚽ / '), '⚽');
+      expect(removerUltimoBloco(' / '), '');
+    });
+
+    test('can keep a fixed number of blocks', () {
+      expect(removerUltimoBloco('⚽ / 🟨 / ', manterBlocos: 2), '⚽ / 🟨');
+      expect(removerUltimoBloco('⚽', manterBlocos: 1), '⚽');
+    });
+  });
 }

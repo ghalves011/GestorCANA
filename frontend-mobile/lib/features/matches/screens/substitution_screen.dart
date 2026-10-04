@@ -9,6 +9,7 @@ import '../../players/models/jogador.dart';
 import '../models/jogador_partida.dart';
 import '../models/partida.dart';
 import '../providers/partida_providers.dart';
+import '../utils/event_cell_utils.dart';
 import '../widgets/bench_list.dart';
 import '../widgets/referee_row.dart';
 import '../widgets/team_panel.dart';
@@ -73,13 +74,115 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
         .map((LiveSlot s) =>
             LiveSlot(jogador: s.jogador, eventos: s.eventos, nomesExibir: s.nomesExibir, posicaoSlot: s.posicaoSlot))
         .toList();
-    _banco = widget.partida.listaGeralPresenca
-        .where((JogadorPartida jp) => (jp.status ?? '').toLowerCase() == 'reserva')
-        .map((JogadorPartida jp) => jp.copyWith())
-        .toList();
+    _banco = widget.partida.listaGeralPresenca.where(_ehBanco).map((JogadorPartida jp) => jp.copyWith()).toList();
     _arbitro = widget.partida.arbitro;
     _bandeira1 = widget.partida.bandeira1;
     _bandeira2 = widget.partida.bandeira2;
+  }
+
+  /// Bench = not on either team. A finalized match's saved presence list
+  /// (edit mode) also uses status "RESERVA" for players who came ON as
+  /// substitutes, so the team must be checked too, not just the status.
+  static bool _ehBanco(JogadorPartida jp) {
+    final String time = (jp.time ?? 'Nenhum').toLowerCase();
+    return (jp.status ?? '').toLowerCase() == 'reserva' && (time == 'nenhum' || time.isEmpty);
+  }
+
+  bool _vagaVazia(LiveSlot slot) => slot.jogador.id == null || slot.jogador.id == 0;
+
+  Future<void> _excluirDoBanco() async {
+    final int? index = _bancoSelecionadoIndex;
+    if (index == null) return;
+    final String nome = _banco[index].jogador?.nomeExibir ?? 'Jogador';
+
+    final bool confirmar = await showConfirmDialog(
+      context,
+      title: 'Excluir do banco',
+      message: 'Excluir $nome do banco de reservas desta partida?',
+      confirmLabel: 'Excluir',
+      destructive: true,
+    );
+    if (!confirmar) return;
+
+    setState(() {
+      _banco.removeAt(index);
+      _bancoSelecionadoIndex = null;
+    });
+  }
+
+  String _nomeAtivo(String? texto) {
+    final String ultimo = (texto ?? '').split(' / ').last.trim();
+    if (ultimo.contains('____')) return '';
+    final int parenteses = ultimo.indexOf(' (');
+    return parenteses == -1 ? ultimo : ultimo.substring(0, parenteses).trim();
+  }
+
+  /// Undoes the slot's latest substitution: "J1 / J2" -> "J1". J2's events
+  /// are dropped, J1's kept; J2 goes back to the bench (taking J1's bench
+  /// entry if J1 is still there).
+  Future<void> _desfazerSubstituicao(String time, int index) async {
+    final List<LiveSlot> lista = time == 'Azul' ? _azul : _vermelho;
+    final LiveSlot slot = lista[index];
+    final List<String> nomes = slot.nomesExibir.split(' / ');
+    if (nomes.length < 2) return;
+
+    final String nomeVoltando = nomes[nomes.length - 2].trim();
+    final Jogador saindo = slot.jogador;
+
+    final bool apitando = <String?>[_arbitro, _bandeira1, _bandeira2]
+        .any((String? cargo) => _nomeAtivo(cargo).toLowerCase() == nomeVoltando.toLowerCase());
+    if (apitando) {
+      await showMessageDialog(
+        context,
+        title: 'Não é possível desfazer',
+        message: '$nomeVoltando está apitando agora. Tire-o da arbitragem antes de desfazer a substituição.',
+      );
+      return;
+    }
+
+    final bool confirmar = await showConfirmDialog(
+      context,
+      title: 'Remover substituição',
+      message: 'Desfazer a entrada de ${saindo.nomeExibir}? $nomeVoltando volta para a vaga e os eventos de '
+          '${saindo.nomeExibir} serão descartados.',
+      confirmLabel: 'Desfazer',
+    );
+    if (!confirmar) return;
+
+    bool mesmoNome(Jogador? j) => j != null && j.nomeExibir.toLowerCase() == nomeVoltando.toLowerCase();
+
+    setState(() {
+      final int noBanco = _banco.indexWhere((JogadorPartida jp) => mesmoNome(jp.jogador));
+      Jogador? voltando;
+      if (noBanco != -1) {
+        voltando = _banco[noBanco].jogador;
+        _banco[noBanco] = _banco[noBanco].copyWith(jogador: saindo, jogadorId: saindo.id ?? 0);
+      } else {
+        for (final JogadorPartida jp in widget.partida.listaGeralPresenca) {
+          if (mesmoNome(jp.jogador)) {
+            voltando = jp.jogador;
+            break;
+          }
+        }
+        _banco.add(
+          JogadorPartida(
+            jogadorId: saindo.id ?? 0,
+            jogador: saindo,
+            partidaId: widget.partida.id ?? 0,
+            time: 'Nenhum',
+            status: 'Reserva',
+          ),
+        );
+      }
+
+      lista[index] = LiveSlot(
+        jogador: voltando ?? Jogador(nome: nomeVoltando),
+        nomesExibir: removerUltimoBloco(slot.nomesExibir),
+        eventos: removerUltimoBloco(slot.eventos, manterBlocos: nomes.length - 1),
+        posicaoSlot: slot.posicaoSlot,
+      );
+      _bancoSelecionadoIndex = null;
+    });
   }
 
   Future<void> _selecionarBanco(int index) async {
@@ -109,6 +212,18 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
     }
 
     final Jogador entrandoJogador = entrando.jogador!;
+
+    if (_vagaVazia(slotSaindo)) {
+      // Empty slot (player removed with nobody on the bench): the incoming
+      // player just takes it — no "saiu / entrou" chain, nobody to bench.
+      setState(() {
+        lista[index] = LiveSlot(jogador: entrandoJogador, posicaoSlot: slotSaindo.posicaoSlot);
+        _banco.removeAt(_bancoSelecionadoIndex!);
+        _bancoSelecionadoIndex = null;
+      });
+      return;
+    }
+
     setState(() {
       // Mirrors the desktop's processarSubstituicaoJogador /
       // apiRegistrarSubstituicaoNoEvento: the Nome column accumulates the
@@ -263,7 +378,7 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
       ..bandeira1 = _bandeira1
       ..bandeira2 = _bandeira2
       ..listaGeralPresenca = <JogadorPartida>[
-        ...widget.partida.listaGeralPresenca.where((JogadorPartida jp) => (jp.status ?? '').toLowerCase() != 'reserva'),
+        ...widget.partida.listaGeralPresenca.where((JogadorPartida jp) => !_ehBanco(jp)),
         ..._banco,
       ];
     Navigator.of(context).pop(SubstitutionResult(partida: atualizado, azul: _azul, vermelho: _vermelho));
@@ -289,11 +404,20 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
           ),
           ...List<Widget>.generate(lista.length, (int index) {
             final LiveSlot slot = lista[index];
+            final bool temSubstituicao = slot.nomesExibir.contains(' / ');
             return ListTile(
               dense: true,
               title: Text(slot.nomesExibir),
               subtitle: Text(slot.posicaoSlot ?? slot.jogador.posicao ?? ''),
-              trailing: _bancoSelecionadoIndex != null ? const Icon(Icons.swap_horiz) : null,
+              trailing: _bancoSelecionadoIndex != null
+                  ? const Icon(Icons.swap_horiz)
+                  : temSubstituicao
+                      ? IconButton(
+                          tooltip: 'Remover substituição',
+                          icon: const Icon(Icons.undo),
+                          onPressed: () => _desfazerSubstituicao(time, index),
+                        )
+                      : null,
               onTap: () => _tocarSlotTitular(time, index),
             );
           }),
@@ -318,12 +442,27 @@ class _SubstitutionScreenState extends ConsumerState<SubstitutionScreen> {
           BenchList(reservas: _banco, selecionadoIndex: _bancoSelecionadoIndex, onSelect: _selecionarBanco),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: OutlinedButton.icon(
-              onPressed: _carregandoAtrasados ? null : _chegouAtrasado,
-              icon: _carregandoAtrasados
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.person_add_alt),
-              label: const Text('+ Chegou Atrasado'),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _carregandoAtrasados ? null : _chegouAtrasado,
+                    icon: _carregandoAtrasados
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.person_add_alt),
+                    label: const FittedBox(fit: BoxFit.scaleDown, child: Text('+ Chegou Atrasado')),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+                    onPressed: _bancoSelecionadoIndex == null ? null : _excluirDoBanco,
+                    icon: const Icon(Icons.person_remove_outlined),
+                    label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Excluir do banco')),
+                  ),
+                ),
+              ],
             ),
           ),
           const Padding(

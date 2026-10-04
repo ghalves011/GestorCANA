@@ -20,10 +20,15 @@ import 'match_report_screen.dart';
 import 'substitution_screen.dart';
 
 class MatchLiveArgs {
-  const MatchLiveArgs({required this.partida, required this.liveMode});
+  const MatchLiveArgs({required this.partida, required this.liveMode, this.editMode = false});
 
   final Partida partida;
   final bool liveMode;
+
+  /// Editing an already-finalized match (from match history): the saved
+  /// grid is loaded into editable slots and "Salvar" rewrites the match
+  /// (PUT /partidas/{id}) instead of finalizing it. Pops `true` once saved.
+  final bool editMode;
 }
 
 /// Mirrors TelaPartidaLiveView: the core live-scoreboard screen, dual-
@@ -61,6 +66,11 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
   final GlobalKey _scoreboardKey = GlobalKey();
 
   bool get _liveMode => widget.args.liveMode;
+  bool get _editMode => widget.args.editMode;
+
+  /// Slots accept events/swaps/substitutions (live match or editing a
+  /// finalized one); false only for the read-only history view.
+  bool get _interativo => _liveMode || _editMode;
 
   @override
   void initState() {
@@ -73,6 +83,44 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     } else {
       _carregarHistorico();
     }
+  }
+
+  /// Edit mode: rebuilds editable slots from the saved grid rows, resolving
+  /// each slot's active (last) player against listaGeralPresenca so events
+  /// can be recorded for them (unknown names get an id-less Jogador).
+  List<LiveSlot> _slotsDoHistorico(List<GridHistoricoRow> rows) {
+    return rows.map((GridHistoricoRow row) {
+      final String nomeAtivo = _nomeAtivo(row.nomes);
+      Jogador? jogador;
+      for (final JogadorPartida jp in _partida.listaGeralPresenca) {
+        if (jp.jogador != null && jp.jogador!.nomeExibir.toLowerCase() == nomeAtivo.toLowerCase()) {
+          jogador = jp.jogador;
+          break;
+        }
+      }
+      return LiveSlot(
+        jogador: jogador ?? Jogador(nome: nomeAtivo),
+        eventos: row.eventos,
+        nomesExibir: row.nomes,
+        posicaoSlot: row.pos,
+      );
+    }).toList();
+  }
+
+  /// "J1 / J2 (MEI)" -> "J2".
+  String _nomeAtivo(String nomes) {
+    final String ultimo = nomes.split(' / ').last.trim();
+    final int parenteses = ultimo.indexOf(' (');
+    return parenteses == -1 ? ultimo : ultimo.substring(0, parenteses).trim();
+  }
+
+  void _recalcularPlacar() {
+    final ({int azul, int vermelho}) placar = calcularPlacar(
+      _azul.map((LiveSlot s) => s.eventos),
+      _vermelho.map((LiveSlot s) => s.eventos),
+    );
+    _partida.golsTimeAzul = placar.azul;
+    _partida.golsTimeVermelho = placar.vermelho;
   }
 
   /// Builds this team's live slots from listaGeralPresenca (status
@@ -127,6 +175,10 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
         setState(() {
           _azulHistorico = azul;
           _vermelhoHistorico = vermelho;
+          if (_editMode) {
+            _azul = _slotsDoHistorico(azul);
+            _vermelho = _slotsDoHistorico(vermelho);
+          }
         });
       }
     } catch (e) {
@@ -139,7 +191,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
   }
 
   void _onTapSlot(String time, int index) {
-    if (!_liveMode) return;
+    if (!_interativo) return;
 
     if (_armado == null) {
       setState(() => _armado = _ArmedSlot(time, index));
@@ -217,14 +269,20 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     final List<LiveSlot> lista = time == 'Azul' ? _azul : _vermelho;
     final LiveSlot slot = lista[index];
 
+    final bool vagaVazia = slot.jogador.id == null || slot.jogador.id == 0;
     final EventActionResult? resultado = await showPlayerEventActionsSheet(
       context,
       nomeJogador: slot.jogador.nomeExibir,
       tokensAtivos: activeTokens(slot.eventos),
+      // A slot with substitution history is undone via "Remover
+      // substituição" on the substitutions screen instead.
+      podeRemoverJogador: !vagaVazia && !slot.nomesExibir.contains(' / '),
     );
     if (resultado == null) return;
 
-    if (resultado.tokenAdicionar != null) {
+    if (resultado.removerJogador) {
+      await _removerJogador(time, index);
+    } else if (resultado.tokenAdicionar != null) {
       await _registrarEvento(time, index, resultado.tokenAdicionar!);
     } else if (resultado.tokenRemover != null) {
       await _removerEvento(time, index, resultado.tokenRemover!);
@@ -312,6 +370,57 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     }
   }
 
+  Future<void> _removerJogador(String time, int index) async {
+    final List<LiveSlot> lista = time == 'Azul' ? _azul : _vermelho;
+    final LiveSlot slot = lista[index];
+    final String posicao = slot.posicaoSlot ?? '';
+    final bool vagaDeGol = posicao.toUpperCase() == 'GOL';
+    final String tipo = vagaDeGol ? 'goleiro' : 'jogador de linha';
+
+    final bool confirmar = await showConfirmDialog(
+      context,
+      title: 'Remover jogador',
+      message: 'Remover ${slot.jogador.nomeExibir} da partida? O próximo $tipo do banco entra no lugar.'
+          '${slot.eventos.trim().isNotEmpty ? '\n\nOs eventos registrados para ele serão descartados.' : ''}',
+      confirmLabel: 'Remover',
+      destructive: true,
+    );
+    if (!confirmar) return;
+
+    try {
+      final ({Partida partida, Jogador? substituto}) resultado =
+          await ref.read(partidaRepositoryProvider).removerEscalado(
+                partida: _partida,
+                nomeJogador: slot.jogador.nomeExibir,
+                time: time,
+                posicao: posicao,
+              );
+      final String nomeRemovido = slot.jogador.nomeExibir;
+      setState(() {
+        _partida.listaGeralPresenca = resultado.partida.listaGeralPresenca;
+        lista[index] = LiveSlot(
+          // Empty slot (id 0): the substitutions screen fills it directly.
+          jogador: resultado.substituto ?? Jogador(id: 0, nome: 'Vaga ${posicao.isEmpty ? '' : posicao}'.trim()),
+          posicaoSlot: slot.posicaoSlot,
+        );
+        _recalcularPlacar();
+      });
+      if (mounted) {
+        await showMessageDialog(
+          context,
+          title: 'Jogador removido',
+          message: resultado.substituto != null
+              ? '$nomeRemovido saiu. ${resultado.substituto!.nomeExibir} entrou no lugar.'
+              : '$nomeRemovido saiu. Não há $tipo no banco: a vaga ficou vazia.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showMessageDialog(context, title: 'Erro', message: e is ApiException ? e.message : e.toString());
+      }
+    }
+  }
+
   Future<void> _abrirSubstituicoes() async {
     final SubstitutionResult? resultado = await Navigator.of(context).push<SubstitutionResult>(
       MaterialPageRoute<SubstitutionResult>(
@@ -325,6 +434,8 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
         // recorded event history for non-substituted players survives.
         _azul = resultado.azul;
         _vermelho = resultado.vermelho;
+        // An undone substitution drops the incoming player's events.
+        _recalcularPlacar();
       });
     }
   }
@@ -333,7 +444,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     final String? novaSumula = await showMatchReportSheet(
       context,
       sumulaInicial: _partida.sumula ?? '',
-      somenteLeitura: !_liveMode,
+      somenteLeitura: !_interativo,
     );
     if (novaSumula != null) {
       setState(() => _partida.sumula = novaSumula);
@@ -350,15 +461,9 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
 
     setState(() => _finalizando = true);
     try {
-      final List<List<dynamic>> gridAzul = _azul
-          .map((LiveSlot s) => <dynamic>[s.nomesExibir, s.posicaoSlot ?? s.jogador.posicao ?? '', s.eventos])
-          .toList();
-      final List<List<dynamic>> gridVermelho = _vermelho
-          .map((LiveSlot s) => <dynamic>[s.nomesExibir, s.posicaoSlot ?? s.jogador.posicao ?? '', s.eventos])
-          .toList();
-
-      final bool salvou =
-          await ref.read(partidaRepositoryProvider).finalizar(partida: _partida, gridAzul: gridAzul, gridVermelho: gridVermelho);
+      final bool salvou = await ref
+          .read(partidaRepositoryProvider)
+          .finalizar(partida: _partida, gridAzul: _montarGrid(_azul), gridVermelho: _montarGrid(_vermelho));
       if (!salvou) {
         if (mounted) {
           await showMessageDialog(
@@ -394,6 +499,99 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
     }
   }
 
+  List<List<dynamic>> _montarGrid(List<LiveSlot> slots) {
+    return slots
+        .map((LiveSlot s) => <dynamic>[s.nomesExibir, s.posicaoSlot ?? s.jogador.posicao ?? '', s.eventos])
+        .toList();
+  }
+
+  Future<void> _salvarEdicao() async {
+    final bool confirmar = await showConfirmDialog(
+      context,
+      title: 'Salvar alterações',
+      message: 'Gravar as alterações desta partida? As estatísticas dos jogadores serão recalculadas.',
+      confirmLabel: 'Salvar',
+    );
+    if (!confirmar) return;
+
+    setState(() => _finalizando = true);
+    try {
+      _recalcularPlacar();
+      final bool salvou = await ref
+          .read(partidaRepositoryProvider)
+          .editar(partida: _partida, gridAzul: _montarGrid(_azul), gridVermelho: _montarGrid(_vermelho));
+      if (!mounted) return;
+      if (!salvou) {
+        await showMessageDialog(
+          context,
+          title: 'Erro ao salvar',
+          message: 'O servidor não confirmou a alteração da partida. Tente novamente.',
+        );
+        return;
+      }
+      await showMessageDialog(context, title: 'Partida atualizada', message: 'Alterações salvas com sucesso.');
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        await showMessageDialog(context, title: 'Erro ao salvar', message: e is ApiException ? e.message : e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _finalizando = false);
+    }
+  }
+
+  Future<void> _editarDados() async {
+    final TextEditingController nomeController = TextEditingController(text: _partida.nomePartida ?? '');
+    DateTime data = _partida.dataPartida ?? DateTime.now();
+
+    final bool? salvar = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setDialogState) => AlertDialog(
+          title: const Text('Editar dados da partida'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: nomeController,
+                decoration: const InputDecoration(labelText: 'Nome da partida'),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today),
+                title: Text(
+                  '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year}',
+                ),
+                onTap: () async {
+                  final DateTime? escolhida = await showDatePicker(
+                    context: context,
+                    initialDate: data,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (escolhida != null) setDialogState(() => data = escolhida);
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('OK')),
+          ],
+        ),
+      ),
+    );
+
+    if (salvar == true) {
+      setState(() {
+        _partida.nomePartida = nomeController.text.trim();
+        _partida.dataPartida = data;
+      });
+    }
+    nomeController.dispose();
+  }
+
   Future<void> _compartilharPlacar() async {
     await ScreenshotUtils.shareBoundaryAsImage(_scoreboardKey, text: _partida.placarFormatado);
   }
@@ -406,7 +604,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
       slots: slots,
       armedIndex: _armado?.time == time ? _armado!.index : null,
       onTapSlot: (int index) => _onTapSlot(time, index),
-      onLongPressSlot: _liveMode ? (int index) => _abrirAcoesEvento(time, index) : null,
+      onLongPressSlot: _interativo ? (int index) => _abrirAcoesEvento(time, index) : null,
     );
   }
 
@@ -449,7 +647,17 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_partida.nomePartida ?? 'Partida')),
+      appBar: AppBar(
+        title: Text(_partida.nomePartida ?? 'Partida'),
+        actions: <Widget>[
+          if (_editMode)
+            IconButton(
+              tooltip: 'Editar nome e data',
+              icon: const Icon(Icons.edit_calendar),
+              onPressed: _editarDados,
+            ),
+        ],
+      ),
       body: _carregandoHistorico
           ? const LoadingView()
           : SingleChildScrollView(
@@ -471,8 +679,8 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
                         bandeira1: _partida.bandeira1,
                         bandeira2: _partida.bandeira2,
                       ),
-                      _liveMode ? _buildTeamPanelLive('Azul') : _buildTeamPanelHistorico('Azul'),
-                      _liveMode ? _buildTeamPanelLive('Vermelho') : _buildTeamPanelHistorico('Vermelho'),
+                      _interativo ? _buildTeamPanelLive('Azul') : _buildTeamPanelHistorico('Azul'),
+                      _interativo ? _buildTeamPanelLive('Vermelho') : _buildTeamPanelHistorico('Vermelho'),
                       const SizedBox(height: 12),
                     ],
                   ),
@@ -482,7 +690,7 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: _liveMode
+          child: _interativo
               ? Row(
                   children: <Widget>[
                     Expanded(
@@ -502,14 +710,14 @@ class _MatchLiveScreenState extends ConsumerState<MatchLiveScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _finalizando ? null : _finalizar,
+                        onPressed: _finalizando ? null : (_editMode ? _salvarEdicao : _finalizar),
                         child: _finalizando
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text('Finalizar'),
+                            : Text(_editMode ? 'Salvar' : 'Finalizar'),
                       ),
                     ),
                   ],
