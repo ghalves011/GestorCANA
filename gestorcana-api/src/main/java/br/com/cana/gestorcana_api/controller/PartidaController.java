@@ -194,6 +194,47 @@ public class PartidaController {
         return ResponseEntity.ok(res);
     }
 
+    @PostMapping("/remover-escalado")
+    public ResponseEntity<Map<String, Object>> removerEscalado(@RequestBody String payloadJson) {
+        JsonObject root = gson.fromJson(payloadJson, JsonObject.class);
+        Partida p = gson.fromJson(root.get("partida"), Partida.class);
+        Jogador substituto = service.removerJogadorEscalado(p,
+                root.get("nomeJogador").getAsString(),
+                root.get("time").getAsString(),
+                root.has("posicao") && !root.get("posicao").isJsonNull() ? root.get("posicao").getAsString() : "");
+        Map<String, Object> resposta = new java.util.HashMap<>();
+        resposta.put("partida", p);
+        resposta.put("substituto", substituto);
+        return ResponseEntity.ok(resposta);
+    }
+
+    @PostMapping("/desfazer-substituicao")
+    public ResponseEntity<Partida> desfazerSubstituicao(@RequestBody String payloadJson) {
+        JsonObject root = gson.fromJson(payloadJson, JsonObject.class);
+        Partida p = gson.fromJson(root.get("partida"), Partida.class);
+        service.desfazerSubstituicao(p, root.get("nomes").getAsString(), root.get("time").getAsString());
+        return ResponseEntity.ok(p);
+    }
+
+    @PutMapping("/{id:\\d+}")
+    public ResponseEntity<Boolean> editar(@PathVariable Integer id, @RequestBody Map<String, Object> payload) {
+        try {
+            Partida partida = gson.fromJson(gson.toJson(payload.get("partida")), Partida.class);
+            String jsonAzul = gson.toJson(payload.get("gridAzul"));
+            String jsonVermelho = gson.toJson(payload.get("gridVermelho"));
+            return ResponseEntity.ok(service.editarPartida(id, partida, jsonAzul, jsonVermelho));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.ok(false);
+        }
+    }
+
+    @DeleteMapping("/{id:\\d+}")
+    public ResponseEntity<Boolean> excluir(@PathVariable Integer id) {
+        boolean excluiu = service.excluirPartida(id);
+        return excluiu ? ResponseEntity.ok(true) : ResponseEntity.notFound().build();
+    }
+
     @PostMapping("/atualizar-substituicao-lista-presenca")
     public ResponseEntity<Partida> atualizarSubstLista(@RequestBody String payloadJson) {
         JsonObject root = gson.fromJson(payloadJson, JsonObject.class);

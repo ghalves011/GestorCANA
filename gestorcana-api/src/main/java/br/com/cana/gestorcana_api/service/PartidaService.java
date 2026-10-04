@@ -28,6 +28,9 @@ public class PartidaService {
     @Autowired
     private br.com.cana.gestorcana_api.repository.JogadorPartidaRepository jogadorPartidaRepository;
 
+    @Autowired
+    private br.com.cana.gestorcana_api.repository.EventoRepository eventoRepository;
+
     public PartidaService() {
     }
 
@@ -824,18 +827,26 @@ public class PartidaService {
         }
     }
 
-    private void consolidarEstatisticasJTable(Partida partida, String gridJson, String time) {
+    // Destrincha o grid salvo ("J1 / J2" | pos | "ev1 / ev2") em uma atuação
+    // por jogador, sem gravar nada.
+    private List<br.com.cana.gestorcana_api.entity.JogadorPartida> montarAtuacoesDoGrid(Partida partida, String gridJson,
+            String time) {
+        List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = new ArrayList<>();
         if (gridJson == null || gridJson.isEmpty())
-            return;
+            return atuacoes;
 
         java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<Object[]>>() {
         }.getType();
         List<Object[]> linhas = new com.google.gson.Gson().fromJson(gridJson, type);
+        if (linhas == null)
+            return atuacoes;
 
         for (Object[] linha : linhas) {
+            if (linha == null || linha.length < 3 || linha[0] == null)
+                continue;
             String nomes = linha[0].toString();
-            String pos = linha[1].toString();
-            String eventos = linha[2].toString();
+            String pos = linha[1] != null ? linha[1].toString() : "LIN";
+            String eventos = linha[2] != null ? linha[2].toString() : "";
 
             String[] arrayNomes = nomes.split(" / ");
             String[] arrayEventos = eventos.split(" / ", -1);
@@ -847,49 +858,57 @@ public class PartidaService {
                 if (jogador != null) {
                     br.com.cana.gestorcana_api.entity.JogadorPartida jp = new br.com.cana.gestorcana_api.entity.JogadorPartida();
                     jp.setJogadorId(jogador.getId());
+                    jp.setJogador(jogador);
                     jp.setPartidaId(partida.getId());
                     jp.setTime(time);
                     jp.setFuncao(time + "_" + pos);
                     jp.setStatus(i == 0 && arrayNomes.length == 1 ? "TITULAR" : (i == 0 ? "SUBSTITUIDO" : "RESERVA"));
 
                     String evs = (i < arrayEventos.length) ? arrayEventos[i] : "";
-                    
+
                     // Atenção aqui: Use os emojis ou a codificação ISO que estiver funcionando no seu Java
-                    int amarelosNaPartida = contarTokensNoBlocoAtivo(evs, "🟨");
-                    int vermelhosNaPartida = contarTokensNoBlocoAtivo(evs, "🟥");
-
                     jp.setGols(contarTokensNoBlocoAtivo(evs, "⚽") + contarTokensNoBlocoAtivo(evs, "⚽(C)"));
-                    jp.setCartaoAmarelo(amarelosNaPartida);
-                    jp.setCartaoVermelho(vermelhosNaPartida);
-
-                    // 1. Salva a atuação da partida atual no banco
-                    jogadorPartidaRepository.save(jp);
-
-                    // =========================================================================
-                    // 2. AVALIAÇÃO DE SUSPENSÃO (Sem o "if" limitador)
-                    // =========================================================================
-                    int totalAmarelosAtuais = jogador.getcAmarelosIniciais() != null ? jogador.getcAmarelosIniciais() : 0;
-                    
-                    List<br.com.cana.gestorcana_api.entity.JogadorPartida> historico = jogadorPartidaRepository.findByJogadorId(jogador.getId());
-                    
-                    for (br.com.cana.gestorcana_api.entity.JogadorPartida histJp : historico) {
-                        // Ignora a partida atual que acabou de ser gravada para não somar em dobro
-                        if (!histJp.getPartidaId().equals(partida.getId())) {
-                            totalAmarelosAtuais += (histJp.getCartaoAmarelo() != null ? histJp.getCartaoAmarelo() : 0);
-                        }
-                    }
-
-                    int amarelosFinais = totalAmarelosAtuais + amarelosNaPartida;
-
-                    // Se tomou vermelho direto OU acumulou 3 amarelos no total geral do campeonato:
-                    if (vermelhosNaPartida > 0 || amarelosFinais >= 3) {
-                        jogador.setEstaSuspenso(true);
-                        jogador.setStatus("Suspenso");
-                        jogadorRepository.save(jogador);
-                    }
-                    // =========================================================================
+                    jp.setCartaoAmarelo(contarTokensNoBlocoAtivo(evs, "🟨"));
+                    jp.setCartaoVermelho(contarTokensNoBlocoAtivo(evs, "🟥"));
+                    atuacoes.add(jp);
                 }
             }
+        }
+        return atuacoes;
+    }
+
+    private void consolidarEstatisticasJTable(Partida partida, String gridJson, String time) {
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : montarAtuacoesDoGrid(partida, gridJson, time)) {
+            Jogador jogador = jp.getJogador();
+            int amarelosNaPartida = jp.getCartaoAmarelo();
+            int vermelhosNaPartida = jp.getCartaoVermelho();
+
+            // 1. Salva a atuação da partida atual no banco
+            jogadorPartidaRepository.save(jp);
+
+            // =========================================================================
+            // 2. AVALIAÇÃO DE SUSPENSÃO (Sem o "if" limitador)
+            // =========================================================================
+            int totalAmarelosAtuais = jogador.getcAmarelosIniciais() != null ? jogador.getcAmarelosIniciais() : 0;
+
+            List<br.com.cana.gestorcana_api.entity.JogadorPartida> historico = jogadorPartidaRepository.findByJogadorId(jogador.getId());
+
+            for (br.com.cana.gestorcana_api.entity.JogadorPartida histJp : historico) {
+                // Ignora a partida atual que acabou de ser gravada para não somar em dobro
+                if (!histJp.getPartidaId().equals(partida.getId())) {
+                    totalAmarelosAtuais += (histJp.getCartaoAmarelo() != null ? histJp.getCartaoAmarelo() : 0);
+                }
+            }
+
+            int amarelosFinais = totalAmarelosAtuais + amarelosNaPartida;
+
+            // Se tomou vermelho direto OU acumulou 3 amarelos no total geral do campeonato:
+            if (vermelhosNaPartida > 0 || amarelosFinais >= 3) {
+                jogador.setEstaSuspenso(true);
+                jogador.setStatus("Suspenso");
+                jogadorRepository.save(jogador);
+            }
+            // =========================================================================
         }
     }
 
@@ -1041,6 +1060,313 @@ public class PartidaService {
     private String formatarSiglaPosicao(String sigla) {
         if (sigla == null || sigla.isEmpty()) return sigla;
         return sigla.substring(0, 1).toUpperCase() + sigla.substring(1).toLowerCase();
+    }
+
+    // =========================================================================
+    // REMOVER JOGADOR ESCALADO ERRONEAMENTE (Tela Live)
+    // =========================================================================
+
+    private String nomeExibicao(Jogador j) {
+        if (j == null) return "";
+        if (j.getApelido() != null && !j.getApelido().trim().isEmpty()) return j.getApelido().trim();
+        return j.getNome() != null ? j.getNome().trim() : "";
+    }
+
+    private boolean ehGoleiro(Jogador j) {
+        return j != null && j.getPosicao() != null && j.getPosicao().toUpperCase().contains("GOL");
+    }
+
+    private boolean estaNaArbitragem(Partida partida, String nome) {
+        return nome.equalsIgnoreCase(obterNomeAtivo(partida.getArbitro()))
+                || nome.equalsIgnoreCase(obterNomeAtivo(partida.getBandeira1()))
+                || nome.equalsIgnoreCase(obterNomeAtivo(partida.getBandeira2()));
+    }
+
+    private br.com.cana.gestorcana_api.entity.JogadorPartida buscarNaListaPresenca(Partida partida, String nome,
+            String timePreferido) {
+        br.com.cana.gestorcana_api.entity.JogadorPartida qualquerTime = null;
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : partida.getListaGeralPresenca()) {
+            if (jp == null || jp.getJogador() == null || !nomeExibicao(jp.getJogador()).equalsIgnoreCase(nome))
+                continue;
+            if (timePreferido == null || timePreferido.equalsIgnoreCase(jp.getTime()))
+                return jp;
+            if (qualquerTime == null)
+                qualquerTime = jp;
+        }
+        return qualquerTime;
+    }
+
+    /**
+     * Tira da partida um jogador escalado por engano e coloca na vaga dele o
+     * próximo do banco por ordem de chegada (a ordem da listaGeralPresenca):
+     * vaga de GOL recebe o próximo goleiro, vaga de linha o próximo jogador de
+     * linha. Suspensos e quem está apitando são pulados. Sem ninguém
+     * disponível a vaga fica vazia e o retorno é null.
+     */
+    public Jogador removerJogadorEscalado(Partida partida, String nomeJogador, String time, String posicaoSlot) {
+        if (partida == null) return null;
+        if (partida.getListaGeralPresenca() == null) partida.setListaGeralPresenca(new ArrayList<>());
+
+        String nomeLimpo = obterNomeAtivo(nomeJogador);
+        br.com.cana.gestorcana_api.entity.JogadorPartida removido = buscarNaListaPresenca(partida, nomeLimpo, time);
+        String funcao = null;
+        if (removido != null) {
+            funcao = removido.getFuncao();
+            partida.getListaGeralPresenca().remove(removido);
+        }
+
+        boolean vagaDeGol = "GOL".equalsIgnoreCase(posicaoSlot != null ? posicaoSlot.trim() : "");
+
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : partida.getListaGeralPresenca()) {
+            if (jp == null || jp.getJogador() == null || jp.getJogadorId() == null || jp.getJogadorId() == 0)
+                continue;
+            if (!"Nenhum".equalsIgnoreCase(jp.getTime()) || !"Reserva".equalsIgnoreCase(jp.getStatus()))
+                continue;
+
+            Jogador candidato = jp.getJogador();
+            if (ehGoleiro(candidato) != vagaDeGol)
+                continue;
+            if (estaNaArbitragem(partida, nomeExibicao(candidato)))
+                continue;
+            boolean suspenso = Boolean.TRUE.equals(candidato.getEstaSuspenso())
+                    || jogadorRepository.findById(jp.getJogadorId())
+                            .map(j -> Boolean.TRUE.equals(j.getEstaSuspenso())).orElse(false);
+            if (suspenso)
+                continue;
+
+            jp.setTime(time);
+            jp.setStatus("Titular");
+            jp.setFuncao(funcao != null ? funcao : time + "_" + (vagaDeGol ? "GOL" : "LIN") + "_0");
+            return candidato;
+        }
+        return null;
+    }
+
+    // =========================================================================
+    // DESFAZER A ÚLTIMA SUBSTITUIÇÃO DE UMA VAGA ("J1 / J2" -> "J1")
+    // =========================================================================
+
+    /**
+     * Ajusta a lista de presença ao desfazer a última troca de uma vaga: quem
+     * tinha entrado volta para o banco e quem tinha saído volta para a vaga.
+     */
+    public boolean desfazerSubstituicao(Partida partida, String nomesDaVaga, String time) {
+        if (partida == null || nomesDaVaga == null || !nomesDaVaga.contains(" / ")) return false;
+        if (partida.getListaGeralPresenca() == null) partida.setListaGeralPresenca(new ArrayList<>());
+
+        String[] partes = nomesDaVaga.split(" / ");
+        String nomeSaindo = obterNomeAtivo(partes[partes.length - 1]);
+        String nomeVoltando = obterNomeAtivo(partes[partes.length - 2]);
+
+        br.com.cana.gestorcana_api.entity.JogadorPartida jpSaindo = buscarNaListaPresenca(partida, nomeSaindo, time);
+        br.com.cana.gestorcana_api.entity.JogadorPartida jpVoltando = nomeVoltando.isEmpty() ? null
+                : buscarNaListaPresenca(partida, nomeVoltando, "Nenhum");
+
+        String funcao = null;
+        if (jpSaindo != null) {
+            funcao = jpSaindo.getFuncao();
+            jpSaindo.setTime("Nenhum");
+            jpSaindo.setStatus("Reserva");
+            jpSaindo.setFuncao(ehGoleiro(jpSaindo.getJogador()) ? "GOL" : "LIN");
+        }
+
+        if (jpVoltando == null && !nomeVoltando.isEmpty()) {
+            // Saiu do banco (ex.: excluído) depois da troca: recria o registro
+            Jogador j = buscarJogadorPorNomeOuApelido(nomeVoltando);
+            if (j != null) {
+                jpVoltando = new br.com.cana.gestorcana_api.entity.JogadorPartida();
+                jpVoltando.setJogadorId(j.getId());
+                jpVoltando.setJogador(j);
+                jpVoltando.setPartidaId(partida.getId() != null ? partida.getId() : 0);
+                partida.getListaGeralPresenca().add(jpVoltando);
+            }
+        }
+        if (jpVoltando != null) {
+            jpVoltando.setTime(time);
+            jpVoltando.setStatus("Titular");
+            if (funcao != null) jpVoltando.setFuncao(funcao);
+        }
+        return true;
+    }
+
+    // =========================================================================
+    // EDIÇÃO E EXCLUSÃO DE PARTIDA JÁ FINALIZADA (Tela de Consulta)
+    // =========================================================================
+
+    /**
+     * Regrava uma partida finalizada. Os cartões NÃO são regravados direto do
+     * grid: ao cumprir suspensão o histórico de cartões é zerado, então só a
+     * diferença (grid novo - grid antigo) é aplicada sobre o que está gravado,
+     * e a suspensão é reavaliada apenas para quem teve cartão alterado.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public boolean editarPartida(Integer id, Partida dados, String gridAzulJson, String gridVermelhoJson) {
+        if (id == null || dados == null) return false;
+        Optional<Partida> opt = partidaRepository.findById(id);
+        if (opt.isEmpty()) return false;
+        Partida partida = opt.get();
+
+        Map<Integer, int[]> cartoesGridAntigo = somarCartoesPorJogador(partida, partida.getGridAzul(), partida.getGridVermelho());
+        Map<Integer, int[]> cartoesGravados = somarCartoesGravados(jogadorPartidaRepository.findByPartidaId(id));
+        java.util.Set<String> arbitragemAntiga = nomesDaArbitragem(partida);
+
+        partida.setNomePartida(dados.getNomePartida());
+        if (dados.getDataPartida() != null) partida.setDataPartida(dados.getDataPartida());
+        partida.setGolsTimeAzul(dados.getGolsTimeAzul());
+        partida.setGolsTimeVermelho(dados.getGolsTimeVermelho());
+        partida.setArbitro(dados.getArbitro());
+        partida.setBandeira1(dados.getBandeira1());
+        partida.setBandeira2(dados.getBandeira2());
+        partida.setSumula(dados.getSumula());
+        partida.setGridAzul(gridAzulJson);
+        partida.setGridVermelho(gridVermelhoJson);
+        partidaRepository.save(partida);
+
+        List<br.com.cana.gestorcana_api.entity.JogadorPartida> novasAtuacoes = new ArrayList<>();
+        novasAtuacoes.addAll(montarAtuacoesDoGrid(partida, gridAzulJson, "Azul"));
+        novasAtuacoes.addAll(montarAtuacoesDoGrid(partida, gridVermelhoJson, "Vermelho"));
+        Map<Integer, int[]> cartoesGridNovo = somarCartoes(novasAtuacoes);
+
+        java.util.Set<Integer> jogadoresAfetados = new java.util.HashSet<>();
+        java.util.Set<Integer> jogadoresComCartaoReduzido = new java.util.HashSet<>();
+        java.util.Set<Integer> todos = new java.util.HashSet<>(cartoesGridAntigo.keySet());
+        todos.addAll(cartoesGridNovo.keySet());
+
+        Map<Integer, int[]> cartoesFinais = new java.util.HashMap<>();
+        for (Integer jogadorId : todos) {
+            int[] antigo = cartoesGridAntigo.getOrDefault(jogadorId, new int[2]);
+            int[] novo = cartoesGridNovo.getOrDefault(jogadorId, new int[2]);
+            int[] gravado = cartoesGravados.getOrDefault(jogadorId, new int[2]);
+            int deltaAm = novo[0] - antigo[0];
+            int deltaVm = novo[1] - antigo[1];
+            cartoesFinais.put(jogadorId, new int[] { Math.max(0, gravado[0] + deltaAm), Math.max(0, gravado[1] + deltaVm) });
+            if (deltaAm != 0 || deltaVm != 0) jogadoresAfetados.add(jogadorId);
+            if (deltaAm < 0 || deltaVm < 0) jogadoresComCartaoReduzido.add(jogadorId);
+        }
+
+        // O total de cartões do jogador na partida fica na sua 1ª atuação
+        java.util.Set<Integer> jaAplicado = new java.util.HashSet<>();
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : novasAtuacoes) {
+            if (jaAplicado.add(jp.getJogadorId())) {
+                int[] finais = cartoesFinais.getOrDefault(jp.getJogadorId(), new int[2]);
+                jp.setCartaoAmarelo(finais[0]);
+                jp.setCartaoVermelho(finais[1]);
+            } else {
+                jp.setCartaoAmarelo(0);
+                jp.setCartaoVermelho(0);
+            }
+        }
+
+        jogadorPartidaRepository.deleteByPartidaId(id);
+        jogadorPartidaRepository.flush();
+        jogadorPartidaRepository.saveAll(novasAtuacoes);
+        jogadorPartidaRepository.flush();
+
+        for (Integer jogadorId : jogadoresAfetados) {
+            reavaliarSuspensao(jogadorId, jogadoresComCartaoReduzido.contains(jogadorId));
+        }
+
+        // Quem entrou na arbitragem pela edição cumpre a suspensão, como no Finalizar
+        java.util.Set<String> arbitragemNova = nomesDaArbitragem(partida);
+        List<String> novosNaArbitragem = new ArrayList<>();
+        for (String nome : arbitragemNova) {
+            boolean jaEstava = arbitragemAntiga.stream().anyMatch(n -> n.equalsIgnoreCase(nome));
+            if (!jaEstava) novosNaArbitragem.add(nome);
+        }
+        if (!novosNaArbitragem.isEmpty()) {
+            processarLimpezaDeSuspensaoPosJogo(novosNaArbitragem, partida);
+        }
+        return true;
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public boolean excluirPartida(Integer id) {
+        if (id == null) return false;
+        Optional<Partida> opt = partidaRepository.findById(id);
+        if (opt.isEmpty()) return false;
+        Partida partida = opt.get();
+
+        Map<Integer, int[]> cartoesGravados = somarCartoesGravados(jogadorPartidaRepository.findByPartidaId(id));
+
+        jogadorPartidaRepository.deleteByPartidaId(id);
+        jogadorPartidaRepository.flush();
+        if (eventoRepository != null) {
+            eventoRepository.deleteAll(eventoRepository.findByPartidaId(id));
+        }
+        partidaRepository.delete(partida);
+        partidaRepository.flush();
+
+        for (Map.Entry<Integer, int[]> e : cartoesGravados.entrySet()) {
+            if (e.getValue()[0] > 0 || e.getValue()[1] > 0) {
+                reavaliarSuspensao(e.getKey(), true);
+            }
+        }
+        return true;
+    }
+
+    private java.util.Set<String> nomesDaArbitragem(Partida partida) {
+        java.util.Set<String> nomes = new java.util.LinkedHashSet<>();
+        for (String campo : new String[] { partida.getArbitro(), partida.getBandeira1(), partida.getBandeira2() }) {
+            if (campo == null) continue;
+            for (String parte : campo.split(" / ")) {
+                String nome = obterNomeAtivo(parte);
+                if (!nome.isEmpty()) nomes.add(nome);
+            }
+        }
+        return nomes;
+    }
+
+    private Map<Integer, int[]> somarCartoesPorJogador(Partida partida, String gridAzulJson, String gridVermelhoJson) {
+        List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = new ArrayList<>();
+        atuacoes.addAll(montarAtuacoesDoGrid(partida, gridAzulJson, "Azul"));
+        atuacoes.addAll(montarAtuacoesDoGrid(partida, gridVermelhoJson, "Vermelho"));
+        return somarCartoes(atuacoes);
+    }
+
+    private Map<Integer, int[]> somarCartoesGravados(List<br.com.cana.gestorcana_api.entity.JogadorPartida> gravadas) {
+        return somarCartoes(gravadas != null ? gravadas : new ArrayList<>());
+    }
+
+    private Map<Integer, int[]> somarCartoes(List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes) {
+        Map<Integer, int[]> soma = new java.util.HashMap<>();
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : atuacoes) {
+            if (jp.getJogadorId() == null) continue;
+            int[] total = soma.computeIfAbsent(jp.getJogadorId(), k -> new int[2]);
+            total[0] += jp.getCartaoAmarelo();
+            total[1] += jp.getCartaoVermelho();
+        }
+        return soma;
+    }
+
+    /**
+     * Suspensão pela regra do Finalizar, olhando os cartões ainda pendentes no
+     * histórico (os já cumpridos foram zerados). Só tira a suspensão quando a
+     * edição reduziu cartões do jogador.
+     */
+    private void reavaliarSuspensao(Integer jogadorId, boolean podeRetirarSuspensao) {
+        Optional<Jogador> opt = jogadorRepository.findById(jogadorId);
+        if (opt.isEmpty()) return;
+        Jogador jogador = opt.get();
+
+        int amarelos = jogador.getcAmarelosIniciais() != null ? jogador.getcAmarelosIniciais() : 0;
+        int vermelhos = 0;
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : jogadorPartidaRepository.findByJogadorId(jogadorId)) {
+            amarelos += jp.getCartaoAmarelo();
+            vermelhos += jp.getCartaoVermelho();
+        }
+
+        boolean deveEstarSuspenso = vermelhos > 0 || amarelos >= 3;
+        boolean suspenso = Boolean.TRUE.equals(jogador.getEstaSuspenso());
+
+        if (deveEstarSuspenso && !suspenso) {
+            jogador.setEstaSuspenso(true);
+            jogador.setStatus("Suspenso");
+            jogadorRepository.save(jogador);
+        } else if (!deveEstarSuspenso && suspenso && podeRetirarSuspensao) {
+            jogador.setEstaSuspenso(false);
+            jogador.setStatus("Ativo");
+            jogadorRepository.save(jogador);
+        }
     }
 
     public void atualizarSubstituicaoNaListaPresenca(Partida partida, String nomeSaindo, String nomeEntrando, String timeAlvo) {
