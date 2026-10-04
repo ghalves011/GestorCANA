@@ -40,6 +40,9 @@ public class TelaSubstituicaoView extends JFrame {
 
     private final Gson gson = ApiClient.GSON;
 
+    // Chamado após CONFIRMAR TROCAS (a tela Live recalcula o placar)
+    private Runnable aoConfirmar;
+
     public TelaSubstituicaoView() {
         this(null, null, null, null, null, null);
     }
@@ -47,7 +50,14 @@ public class TelaSubstituicaoView extends JFrame {
     public TelaSubstituicaoView(br.com.cana.model.Partida partida, DefaultTableModel mainModelAzul,
             DefaultTableModel mainModelVermelho,
             JLabel mainLblArb, JLabel mainLblB1, JLabel mainLblB2) {
+        this(partida, mainModelAzul, mainModelVermelho, mainLblArb, mainLblB1, mainLblB2, null);
+    }
 
+    public TelaSubstituicaoView(br.com.cana.model.Partida partida, DefaultTableModel mainModelAzul,
+            DefaultTableModel mainModelVermelho,
+            JLabel mainLblArb, JLabel mainLblB1, JLabel mainLblB2, Runnable aoConfirmar) {
+
+        this.aoConfirmar = aoConfirmar;
         this.partidaObjeto = partida;
         this.mainModelAzul = mainModelAzul;
         this.mainModelVermelho = mainModelVermelho;
@@ -128,6 +138,24 @@ public class TelaSubstituicaoView extends JFrame {
         btnAdicionarAtrasado.setFocusPainted(false);
         add(btnAdicionarAtrasado);
 
+        // BOTÃO EXCLUIR DO BANCO (jogador selecionado no banco)
+        JButton btnExcluirBanco = new JButton("🗑 Excluir do Banco");
+        btnExcluirBanco.setBounds(150, 478, 150, 24);
+        btnExcluirBanco.setFont(new Font("SansSerif", Font.BOLD, 10));
+        btnExcluirBanco.setBackground(new Color(0xFFCCCC));
+        btnExcluirBanco.setFocusPainted(false);
+        btnExcluirBanco.addActionListener(al -> excluirDoBanco(painelReservas));
+        add(btnExcluirBanco);
+
+        // BOTÃO REMOVER SUBSTITUIÇÃO (vaga selecionada em um dos times)
+        JButton btnRemoverSubstituicao = new JButton("<html><center>↩ Remover<br>Substituição</center></html>");
+        btnRemoverSubstituicao.setBounds(420, 280, 160, 44);
+        btnRemoverSubstituicao.setFont(new Font("SansSerif", Font.BOLD, 11));
+        btnRemoverSubstituicao.setBackground(new Color(0xFFE4B5));
+        btnRemoverSubstituicao.setFocusPainted(false);
+        btnRemoverSubstituicao.addActionListener(al -> removerSubstituicao(painelReservas));
+        add(btnRemoverSubstituicao);
+
         atualizarGridBotoesReservas(painelReservas);
 
         // --- BOTÃO CONFIRMAR ---
@@ -156,14 +184,7 @@ public class TelaSubstituicaoView extends JFrame {
                         }
                         mainModelAzul.addRow(new Object[] { nomeNovo, posReal, "" });
                     } else {
-                        String nomeAntigo = mainModelAzul.getValueAt(i, 0).toString();
-                        if (!nomeAntigo.equals(nomeNovo)) {
-                            mainModelAzul.setValueAt(nomeNovo, i, 0);
-                            if (!nomeAntigo.trim().startsWith("Azul ")) {
-                                String evAtual = mainModelAzul.getValueAt(i, 2).toString();
-                                mainModelAzul.setValueAt(apiRegistrarSubstituicaoNoEvento(evAtual), i, 2);
-                            }
-                        }
+                        aplicarTrocaNaLinha(mainModelAzul, i, nomeNovo, "Azul ");
                     }
                 }
                 for (int i = 0; i < modelVermelho.getRowCount(); i++) {
@@ -186,14 +207,7 @@ public class TelaSubstituicaoView extends JFrame {
                         }
                         mainModelVermelho.addRow(new Object[] { nomeNovo, posReal, "" });
                     } else {
-                        String nomeAntigo = mainModelVermelho.getValueAt(i, 0).toString();
-                        if (!nomeAntigo.equals(nomeNovo)) {
-                            mainModelVermelho.setValueAt(nomeNovo, i, 0);
-                            if (!nomeAntigo.trim().startsWith("Vermelho ")) {
-                                String evAtual = mainModelVermelho.getValueAt(i, 2).toString();
-                                mainModelVermelho.setValueAt(apiRegistrarSubstituicaoNoEvento(evAtual), i, 2);
-                            }
-                        }
+                        aplicarTrocaNaLinha(mainModelVermelho, i, nomeNovo, "Vermelho ");
                     }
                 }
             }
@@ -205,6 +219,9 @@ public class TelaSubstituicaoView extends JFrame {
                 partidaObjeto.setBandeira2(partidaClone.getBandeira2());
             }
             
+            if (aoConfirmar != null) {
+                aoConfirmar.run();
+            }
             this.dispose();
         });
         add(btnConfirmar);
@@ -315,6 +332,124 @@ public class TelaSubstituicaoView extends JFrame {
                 }
             }
         });
+    }
+
+    // Leva para a tela Live o nome da vaga e ajusta os eventos: blocos de quem
+    // continua na sequência são mantidos, os de quem saiu (substituição
+    // desfeita) são descartados e cada novo jogador ganha um bloco vazio.
+    private void aplicarTrocaNaLinha(DefaultTableModel main, int i, String nomeNovo, String prefixoVaga) {
+        String nomeAntigo = main.getValueAt(i, 0).toString();
+        if (nomeAntigo.equals(nomeNovo)) {
+            return;
+        }
+        main.setValueAt(nomeNovo, i, 0);
+        if (nomeAntigo.trim().startsWith(prefixoVaga)) {
+            return;
+        }
+
+        String evAtual = main.getValueAt(i, 2) != null ? main.getValueAt(i, 2).toString() : "";
+        String[] antigos = nomeAntigo.split(" / ");
+        String[] novos = nomeNovo.split(" / ");
+        int iguais = 0;
+        while (iguais < antigos.length && iguais < novos.length
+                && antigos[iguais].trim().equals(novos[iguais].trim())) {
+            iguais++;
+        }
+
+        if (iguais == 0) {
+            main.setValueAt(apiRegistrarSubstituicaoNoEvento(evAtual), i, 2);
+            return;
+        }
+
+        String[] blocosEventos = evAtual.split(" / ", -1);
+        List<String> blocos = new ArrayList<>();
+        for (int b = 0; b < iguais && b < blocosEventos.length; b++) {
+            blocos.add(blocosEventos[b]);
+        }
+        while (blocos.size() < novos.length) {
+            blocos.add("");
+        }
+        main.setValueAt(String.join(" / ", blocos), i, 2);
+    }
+
+    private void excluirDoBanco(JPanel painelReservas) {
+        if (reservaSelecionado.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Selecione no banco o jogador que deseja excluir.", "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String nome = apiObterNomeAtivo(reservaSelecionado);
+        if (JOptionPane.showConfirmDialog(this, "Excluir '" + nome + "' do banco de reservas desta partida?",
+                "Excluir do Banco", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        if (partidaClone != null && partidaClone.getListaGeralPresenca() != null) {
+            for (br.com.cana.model.JogadorPartida jp : partidaClone.getListaGeralPresenca()) {
+                if (jp == null || jp.getJogador() == null || !"Nenhum".equalsIgnoreCase(jp.getTime()))
+                    continue;
+                br.com.cana.model.Jogador j = jp.getJogador();
+                String nomeJ = (j.getApelido() != null && !j.getApelido().trim().isEmpty()) ? j.getApelido().trim()
+                        : (j.getNome() != null ? j.getNome().trim() : "");
+                if (nomeJ.equalsIgnoreCase(nome)) {
+                    partidaClone.getListaGeralPresenca().remove(jp);
+                    break;
+                }
+            }
+        }
+
+        reservaSelecionado = "";
+        btnReservaAtivo = null;
+        atualizarGridBotoesReservas(painelReservas);
+    }
+
+    private void removerSubstituicao(JPanel painelReservas) {
+        int rowAzul = tabelaAzul.getSelectedRow();
+        int rowVermelho = tabelaVermelho.getSelectedRow();
+        if (rowAzul < 0 && rowVermelho < 0) {
+            JOptionPane.showMessageDialog(this, "Selecione no time a vaga que teve a substituição.", "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        DefaultTableModel modelAlvo = rowAzul >= 0 ? modelAzul : modelVermelho;
+        JTable tabelaAlvo = rowAzul >= 0 ? tabelaAzul : tabelaVermelho;
+        int linha = rowAzul >= 0 ? rowAzul : rowVermelho;
+        String time = rowAzul >= 0 ? "Azul" : "Vermelho";
+
+        String nomes = modelAlvo.getValueAt(linha, 0).toString();
+        if (!nomes.contains(" / ")) {
+            JOptionPane.showMessageDialog(this, "Essa vaga não tem substituição para remover.", "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String[] partes = nomes.split(" / ");
+        String saindo = apiObterNomeAtivo(partes[partes.length - 1]);
+        String voltando = apiObterNomeAtivo(partes[partes.length - 2]);
+
+        if (!voltando.isEmpty() && (voltando.equals(apiObterNomeAtivo(partidaClone.getArbitro()))
+                || voltando.equals(apiObterNomeAtivo(partidaClone.getBandeira1()))
+                || voltando.equals(apiObterNomeAtivo(partidaClone.getBandeira2())))) {
+            JOptionPane.showMessageDialog(this, "'" + voltando
+                    + "' está apitando agora. Tire-o da arbitragem antes de desfazer a substituição.",
+                    "Restrição", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        if (JOptionPane.showConfirmDialog(this, "Desfazer a entrada de '" + saindo + "'?\n'" + voltando
+                + "' volta para a vaga e os eventos de '" + saindo + "' serão descartados.",
+                "Remover Substituição", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        apiDesfazerSubstituicao(partidaClone, nomes, time);
+
+        String[] restantes = java.util.Arrays.copyOf(partes, partes.length - 1);
+        modelAlvo.setValueAt(String.join(" / ", restantes), linha, 0);
+        tabelaAlvo.clearSelection();
+        atualizarGridBotoesReservas(painelReservas);
     }
 
     private JLabel criarCampoArbitragem(String cargo, int y) {
@@ -795,6 +930,24 @@ public class TelaSubstituicaoView extends JFrame {
             }
         } catch (Exception e) {
             System.err.println("Erro na API atualizarSubstituicaoNaListaPresenca: " + e.getMessage());
+        }
+    }
+
+    private void apiDesfazerSubstituicao(br.com.cana.model.Partida partida, String nomes, String time) {
+        try {
+            JsonObject json = new JsonObject();
+            json.add("partida", gson.toJsonTree(partida));
+            json.addProperty("nomes", nomes);
+            json.addProperty("time", time);
+            String jsonResp = ApiClient.post("/partidas/desfazer-substituicao", json.toString());
+            if (jsonResp != null && !jsonResp.trim().isEmpty()) {
+                br.com.cana.model.Partida pAtualizada = gson.fromJson(jsonResp, br.com.cana.model.Partida.class);
+                if (pAtualizada != null && pAtualizada.getListaGeralPresenca() != null) {
+                    partida.setListaGeralPresenca(pAtualizada.getListaGeralPresenca());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erro na API desfazerSubstituicao: " + e.getMessage());
         }
     }
 

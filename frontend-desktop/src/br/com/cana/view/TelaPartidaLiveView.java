@@ -25,6 +25,10 @@ public class TelaPartidaLiveView extends JFrame {
     private boolean partidaFinalizada = false;
 
     private boolean modoHistorico;
+    // Edição de partida já finalizada (Tela de Consulta): carrega o grid salvo
+    // como no histórico, mas libera as ações e grava com "SALVAR ALTERAÇÕES".
+    private boolean modoEdicao;
+    private Runnable aoSalvarEdicao;
 
     private String jogadorPendenteTroca = null;
     private boolean isAzulOrigemTroca = false;
@@ -41,8 +45,15 @@ public class TelaPartidaLiveView extends JFrame {
 
     // 🛠️ CONSTRUTOR INTEGRADO: Recebe a entidade Partida completa do Banco/Sorteio
     public TelaPartidaLiveView(br.com.cana.model.Partida partida, boolean isHistoricoView) {
+        this(partida, isHistoricoView, false, null);
+    }
+
+    public TelaPartidaLiveView(br.com.cana.model.Partida partida, boolean isHistoricoView, boolean isEdicao,
+            Runnable aoSalvarEdicao) {
         this.partidaObjeto = partida;
-        this.modoHistorico = isHistoricoView;
+        this.modoHistorico = isHistoricoView || isEdicao;
+        this.modoEdicao = isEdicao;
+        this.aoSalvarEdicao = aoSalvarEdicao;
 
         // SINCRONIZAÇÃO DE PLACAR HISTÓRICO
         this.golsAzul = partida.getGolsTimeAzul();
@@ -69,7 +80,7 @@ public class TelaPartidaLiveView extends JFrame {
 
         String temporada = partida.getTemporadaId() != null ? String.valueOf(partida.getTemporadaId()) : "2026";
 
-        setTitle("CANA Live - " + nomePartida);
+        setTitle((modoEdicao ? "CANA - Editar Partida - " : "CANA Live - ") + nomePartida);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(1000, 750);
         setLocationRelativeTo(null);
@@ -153,8 +164,8 @@ public class TelaPartidaLiveView extends JFrame {
         ImagemUtil.BotaoGradienteCANA btnSub = new ImagemUtil.BotaoGradienteCANA("SUBSTITUIÇÕES");
         btnSub.setBounds(150, posYBotoes, 200, 60);
         btnSub.addActionListener(
-                e -> new TelaSubstituicaoView(partidaObjeto, modelAzul, modelVermelho, lblArb, lblB1, lblB2)
-                        .setVisible(true));
+                e -> new TelaSubstituicaoView(partidaObjeto, modelAzul, modelVermelho, lblArb, lblB1, lblB2,
+                        this::recalcularPlacar).setVisible(true));
         add(btnSub);
 
         // --- BOTÃO SÚMULA (CHAMANDO A TELA OFICIAL DO PROJETO) ---
@@ -165,10 +176,15 @@ public class TelaPartidaLiveView extends JFrame {
 
         // --- BOTÃO FINALIZAR (VERSÃO CLEAN CODE) ---
         // --- BOTÃO FINALIZAR (ARQUITETURA CORRETA E LIMPA) ---
-        ImagemUtil.BotaoGradienteCANA btnFinalizar = new ImagemUtil.BotaoGradienteCANA("FINALIZAR");
+        ImagemUtil.BotaoGradienteCANA btnFinalizar = new ImagemUtil.BotaoGradienteCANA(
+                modoEdicao ? "SALVAR ALTERAÇÕES" : "FINALIZAR");
         btnFinalizar.setBounds(680, posYBotoes, 200, 60);
 
         btnFinalizar.addActionListener(e -> {
+            if (modoEdicao) {
+                salvarEdicao();
+                return;
+            }
             int resp = JOptionPane.showConfirmDialog(this, "Deseja finalizar a partida e gravar os dados?", "Encerrar",
                     JOptionPane.YES_NO_OPTION);
 
@@ -304,6 +320,20 @@ public class TelaPartidaLiveView extends JFrame {
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Erro ao carregar grid do histórico: " + ex.getMessage(),
                         "Erro", JOptionPane.ERROR_MESSAGE);
+            }
+
+            if (modoEdicao) {
+                // Edição: mantém Substituições / Súmula (editável) / Salvar e
+                // acrescenta a edição de nome e data.
+                this.partidaFinalizada = false;
+                ImagemUtil.BotaoGradienteCANA btnDados = new ImagemUtil.BotaoGradienteCANA("EDITAR DADOS");
+                btnDados.setBounds(40, posYBotoes, 200, 60);
+                btnDados.addActionListener(evt -> editarDadosPartida(lblNomePartida, lblDataValor));
+                add(btnDados);
+                btnSub.setBounds(280, posYBotoes, 200, 60);
+                btnSumula.setBounds(520, posYBotoes, 200, 60);
+                btnFinalizar.setBounds(760, posYBotoes, 200, 60);
+                return;
             }
 
             // Esconde e rearranja os botões originais com segurança
@@ -529,6 +559,10 @@ public class TelaPartidaLiveView extends JFrame {
     }
 
     private void processarClique(MouseEvent e, JTable tabela, DefaultTableModel model, boolean isAzul) {
+        // Histórico é somente leitura (a edição usa o modoEdicao)
+        if (modoHistorico && !modoEdicao)
+            return;
+
         int row = tabela.rowAtPoint(e.getPoint());
         if (row >= 0 && row < tabela.getRowCount()) {
 
@@ -898,8 +932,195 @@ public class TelaPartidaLiveView extends JFrame {
                 menu.add(new JSeparator());
                 menu.add(itemTrocarTime);
 
+                // --- REMOVER JOGADOR ESCALADO POR ENGANO ---
+                boolean vagaComSubstituicao = nomeJogador.contains(" / ");
+                boolean vagaVazia = isVagaVazia(nomeJogador);
+                JMenuItem itemRemoverJogador = new JMenuItem(vagaComSubstituicao
+                        ? "🗑 Remover Jogador (desfaça a substituição antes)"
+                        : "🗑 Remover Jogador");
+                itemRemoverJogador.setEnabled(!vagaComSubstituicao && !vagaVazia);
+                itemRemoverJogador.addActionListener(al -> removerJogadorEscalado(model, row, isAzul));
+                menu.add(new JSeparator());
+                menu.add(itemRemoverJogador);
+
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }
+        }
+    }
+
+    // Vaga sem jogador: "Azul 3" / "Vermelho 3" (mesmo formato da TelaSubstituicao)
+    private boolean isVagaVazia(String nome) {
+        String n = nome != null ? nome.trim() : "";
+        return n.isEmpty() || n.matches("(Azul|Vermelho) \\d+");
+    }
+
+    private void removerJogadorEscalado(DefaultTableModel model, int row, boolean isAzul) {
+        String nome = model.getValueAt(row, 0) != null ? model.getValueAt(row, 0).toString() : "";
+        String pos = model.getValueAt(row, 1) != null ? model.getValueAt(row, 1).toString() : "";
+        String eventos = model.getValueAt(row, 2) != null ? model.getValueAt(row, 2).toString().trim() : "";
+        String time = isAzul ? "Azul" : "Vermelho";
+
+        String msg = "Remover '" + nome + "' da partida?\nO próximo "
+                + ("GOL".equalsIgnoreCase(pos) ? "goleiro" : "jogador de linha") + " do banco entra no lugar.";
+        if (!eventos.isEmpty()) {
+            msg += "\n\nOs eventos registrados para ele serão descartados.";
+        }
+        if (JOptionPane.showConfirmDialog(this, msg, "Remover Jogador",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            com.google.gson.Gson gson = ApiClient.GSON;
+            com.google.gson.JsonObject payload = new com.google.gson.JsonObject();
+            payload.add("partida", gson.toJsonTree(partidaObjeto));
+            payload.addProperty("nomeJogador", nome);
+            payload.addProperty("time", time);
+            payload.addProperty("posicao", pos);
+
+            String resp = ApiClient.post("/partidas/remover-escalado", payload.toString());
+            com.google.gson.JsonObject root = gson.fromJson(resp, com.google.gson.JsonObject.class);
+
+            br.com.cana.model.Partida atualizada = gson.fromJson(root.get("partida"), br.com.cana.model.Partida.class);
+            if (atualizada != null && atualizada.getListaGeralPresenca() != null) {
+                partidaObjeto.setListaGeralPresenca(atualizada.getListaGeralPresenca());
+            }
+
+            br.com.cana.model.Jogador substituto = (root.has("substituto") && !root.get("substituto").isJsonNull())
+                    ? gson.fromJson(root.get("substituto"), br.com.cana.model.Jogador.class)
+                    : null;
+
+            String novoNome;
+            if (substituto != null) {
+                novoNome = (substituto.getApelido() != null && !substituto.getApelido().trim().isEmpty())
+                        ? substituto.getApelido().trim()
+                        : substituto.getNome().trim();
+            } else {
+                novoNome = time + " " + (row + 1);
+            }
+
+            model.setValueAt(novoNome, row, 0);
+            model.setValueAt("", row, 2);
+            recalcularPlacar();
+            tabelaAzul.clearSelection();
+            tabelaVermelho.clearSelection();
+
+            JOptionPane.showMessageDialog(this, substituto != null
+                    ? "'" + nome + "' removido. '" + novoNome + "' entrou no lugar."
+                    : "'" + nome + "' removido. Não há "
+                            + ("GOL".equalsIgnoreCase(pos) ? "goleiro" : "jogador de linha")
+                            + " no banco: a vaga ficou vazia.");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao remover jogador na API: " + ex.getMessage(), "Erro",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // Placar a partir dos eventos das duas tabelas: ⚽ conta para o próprio
+    // time e ⚽(C) para o adversário.
+    public void recalcularPlacar() {
+        int[] azul = contarGolsDoTime(modelAzul);
+        int[] vermelho = contarGolsDoTime(modelVermelho);
+        golsAzul = azul[0] + vermelho[1];
+        golsVermelho = vermelho[0] + azul[1];
+        lblPlacar.setText(golsAzul + " x " + golsVermelho);
+    }
+
+    // [gols a favor, gols contra] marcados pelos jogadores do time
+    private int[] contarGolsDoTime(DefaultTableModel model) {
+        int gols = 0, golsContra = 0;
+        for (int i = 0; i < model.getRowCount(); i++) {
+            String ev = model.getValueAt(i, 2) != null ? model.getValueAt(i, 2).toString() : "";
+            int contra = ev.split(java.util.regex.Pattern.quote("⚽(C)"), -1).length - 1;
+            int todos = ev.split("⚽", -1).length - 1;
+            golsContra += contra;
+            gols += todos - contra;
+        }
+        return new int[] { gols, golsContra };
+    }
+
+    private void editarDadosPartida(JLabel lblNome, JLabel lblData) {
+        JTextField txtNome = new JTextField(partidaObjeto.getNomePartida() != null ? partidaObjeto.getNomePartida() : "");
+        JTextField txtData = new JTextField(partidaObjeto.getDataPartida() != null
+                ? partidaObjeto.getDataPartida().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                : "");
+
+        JPanel painel = new JPanel(new GridLayout(0, 1, 4, 4));
+        painel.add(new JLabel("Nome da partida:"));
+        painel.add(txtNome);
+        painel.add(new JLabel("Data (dd/MM/aaaa):"));
+        painel.add(txtData);
+
+        if (JOptionPane.showConfirmDialog(this, painel, "Editar Dados da Partida", JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        java.time.LocalDate novaData;
+        try {
+            novaData = java.time.LocalDate.parse(txtData.getText().trim(),
+                    java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Data inválida. Use o formato dd/MM/aaaa.", "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String novoNome = txtNome.getText().trim();
+        partidaObjeto.setNomePartida(novoNome);
+        partidaObjeto.setDataPartida(novaData);
+        lblNome.setText(novoNome.toUpperCase());
+        lblData.setText(txtData.getText().trim());
+        setTitle("CANA - Editar Partida - " + novoNome.toUpperCase());
+    }
+
+    private java.util.List<Object[]> coletarGrid(DefaultTableModel model) {
+        java.util.List<Object[]> grid = new java.util.ArrayList<>();
+        for (int i = 0; i < model.getRowCount(); i++) {
+            grid.add(new Object[] {
+                    model.getValueAt(i, 0) != null ? model.getValueAt(i, 0).toString() : "",
+                    model.getValueAt(i, 1) != null ? model.getValueAt(i, 1).toString() : "LIN",
+                    model.getValueAt(i, 2) != null ? model.getValueAt(i, 2).toString() : ""
+            });
+        }
+        return grid;
+    }
+
+    private void salvarEdicao() {
+        if (JOptionPane.showConfirmDialog(this, "Salvar as alterações desta partida?", "Salvar Alterações",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        boolean sucesso = false;
+        try {
+            recalcularPlacar();
+            partidaObjeto.setGolsTimeAzul(golsAzul);
+            partidaObjeto.setGolsTimeVermelho(golsVermelho);
+
+            com.google.gson.Gson gson = ApiClient.GSON;
+            com.google.gson.JsonObject payload = new com.google.gson.JsonObject();
+            payload.add("partida", gson.toJsonTree(partidaObjeto));
+            payload.add("gridAzul", gson.toJsonTree(coletarGrid(modelAzul)));
+            payload.add("gridVermelho", gson.toJsonTree(coletarGrid(modelVermelho)));
+
+            String resp = ApiClient.put("/partidas/" + partidaObjeto.getId(), payload.toString());
+            sucesso = resp != null && Boolean.parseBoolean(resp.trim());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao salvar alterações na API: " + ex.getMessage(), "Erro",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (sucesso) {
+            JOptionPane.showMessageDialog(this, "Partida atualizada com sucesso!");
+            if (aoSalvarEdicao != null) {
+                aoSalvarEdicao.run();
+            }
+            dispose();
+        } else {
+            JOptionPane.showMessageDialog(this, "O servidor não confirmou a alteração da partida.", "Erro",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 

@@ -111,10 +111,20 @@ public class TelaConsultaPartidaView extends JFrame {
         painelBase.setBackground(ImagemUtil.COR_FUNDO);
 
         ImagemUtil.BotaoGradienteCANA btnVerSumula = new ImagemUtil.BotaoGradienteCANA("VER SÚMULA DETALHADA");
-        btnVerSumula.setPreferredSize(new Dimension(300, 50));
+        btnVerSumula.setPreferredSize(new Dimension(240, 50));
         btnVerSumula.addActionListener(e -> executarAberturaPartida());
 
+        ImagemUtil.BotaoGradienteCANA btnEditar = new ImagemUtil.BotaoGradienteCANA("EDITAR PARTIDA");
+        btnEditar.setPreferredSize(new Dimension(220, 50));
+        btnEditar.addActionListener(e -> executarEdicaoPartida());
+
+        ImagemUtil.BotaoGradienteCANA btnExcluir = new ImagemUtil.BotaoGradienteCANA("EXCLUIR PARTIDA");
+        btnExcluir.setPreferredSize(new Dimension(220, 50));
+        btnExcluir.addActionListener(e -> executarExclusaoPartida());
+
         painelBase.add(btnVerSumula);
+        painelBase.add(btnEditar);
+        painelBase.add(btnExcluir);
         add(painelBase, BorderLayout.SOUTH);
 
         // Carrega os dados do SQLite
@@ -183,6 +193,67 @@ public class TelaConsultaPartidaView extends JFrame {
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Erro ao carregar detalhes da partida: " + ex.getMessage(),
                     "Erro", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private Partida partidaSelecionada() {
+        int linhaSelecionada = tabela.getSelectedRow();
+        if (linhaSelecionada == -1 || partidasCarregadas == null || linhaSelecionada >= partidasCarregadas.size()) {
+            JOptionPane.showMessageDialog(this, "Selecione uma partida na lista primeiro!", "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+        return partidasCarregadas.get(linhaSelecionada);
+    }
+
+    private void executarEdicaoPartida() {
+        Partida selecionada = partidaSelecionada();
+        if (selecionada == null)
+            return;
+
+        try {
+            String json = ApiClient.get("/partidas/" + selecionada.getId());
+            Partida completa = ApiClient.GSON.fromJson(json, Partida.class);
+            if (completa == null)
+                return;
+
+            boolean semGrid = (completa.getGridAzul() == null || completa.getGridAzul().trim().isEmpty()
+                    || completa.getGridAzul().trim().equals("[]"))
+                    && (completa.getGridVermelho() == null || completa.getGridVermelho().trim().isEmpty()
+                            || completa.getGridVermelho().trim().equals("[]"));
+            if (semGrid) {
+                JOptionPane.showMessageDialog(this,
+                        "Esta partida não tem a escalação salva (registro antigo) e não pode ser editada.", "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            new TelaPartidaLiveView(completa, true, true, this::carregarPartidasDoBanco).setVisible(true);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao carregar partida para edição: " + ex.getMessage(),
+                    "Erro", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void executarExclusaoPartida() {
+        Partida selecionada = partidaSelecionada();
+        if (selecionada == null)
+            return;
+
+        int resp = JOptionPane.showConfirmDialog(this,
+                "Excluir a partida '" + selecionada.getNomePartida() + "' (" + selecionada.getDataPartidaFormatada()
+                        + ")?\nGols, cartões e presença dela saem das estatísticas. Essa ação não pode ser desfeita.",
+                "Excluir Partida", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (resp != JOptionPane.YES_OPTION)
+            return;
+
+        try {
+            ApiClient.delete("/partidas/" + selecionada.getId());
+            JOptionPane.showMessageDialog(this, "Partida excluída.");
+            carregarPartidasDoBanco();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao excluir partida: " + ex.getMessage(), "Erro",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 }
