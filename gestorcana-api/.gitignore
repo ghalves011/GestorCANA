@@ -34,3 +34,6 @@ build/
 
 ### Secrets ###
 secrets.properties
+
+application-local.properties
+*.dump
