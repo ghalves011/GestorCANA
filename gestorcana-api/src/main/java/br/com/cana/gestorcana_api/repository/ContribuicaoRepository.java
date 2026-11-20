@@ -20,6 +20,10 @@ public interface ContribuicaoRepository extends JpaRepository<Contribuicao, Inte
 
     boolean existsByJogadorIdAndPago(Integer jogadorId, Integer pago);
 
+    long countByAnoAndPago(Integer ano, Integer pago);
+
+    boolean existsByAno(Integer ano);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM Contribuicao c WHERE c.jogadorId = :jogadorId AND c.mes = :mes AND c.ano = :ano")

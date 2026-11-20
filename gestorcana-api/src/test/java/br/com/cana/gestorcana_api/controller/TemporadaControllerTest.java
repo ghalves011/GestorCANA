@@ -1,6 +1,9 @@
 package br.com.cana.gestorcana_api.controller;
 
+import br.com.cana.gestorcana_api.dto.ResumoViradaDTO;
+import br.com.cana.gestorcana_api.entity.StatusTemporada;
 import br.com.cana.gestorcana_api.entity.Temporada;
+import br.com.cana.gestorcana_api.exception.RegraNegocioException;
 import br.com.cana.gestorcana_api.service.TemporadaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -122,6 +125,72 @@ class TemporadaControllerTest {
         mockMvc.perform(delete("/temporadas/1")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("Deverá retornar HTTP 409 ao tentar deletar a temporada vigente")
+    void testDeletarRecusado() throws Exception {
+        Mockito.when(service.deletar(eq(2026)))
+                .thenThrow(new RegraNegocioException("Não é possível excluir a temporada vigente."));
+
+        mockMvc.perform(delete("/temporadas/2026"))
+                .andExpect(status().isConflict())
+                .andExpect(content().string("Não é possível excluir a temporada vigente."));
+    }
+
+    @Test
+    @DisplayName("GET /temporadas/vigente: 200 com a vigente ou 404")
+    void testBuscarVigente() throws Exception {
+        temporadaExemplo.setStatus(StatusTemporada.VIGENTE);
+        Mockito.when(service.buscarVigente()).thenReturn(Optional.of(temporadaExemplo));
+
+        mockMvc.perform(get("/temporadas/vigente"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ano", is(2026)))
+                .andExpect(jsonPath("$.status", is("VIGENTE")));
+
+        Mockito.when(service.buscarVigente()).thenReturn(Optional.empty());
+        mockMvc.perform(get("/temporadas/vigente"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /temporadas/virada/resumo: 200 com o resumo")
+    void testResumoVirada() throws Exception {
+        Mockito.when(service.gerarResumoVirada()).thenReturn(new ResumoViradaDTO(
+                2026, 2027, 40, List.of("Bia"), 7, false, List.of("Fazer backup antes de confirmar.")));
+
+        mockMvc.perform(get("/temporadas/virada/resumo"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.anoNovo", is(2027)))
+                .andExpect(jsonPath("$.jogadoresSuspensos[0]", is("Bia")))
+                .andExpect(jsonPath("$.loteAnoNovoJaGerado", is(false)));
+    }
+
+    @Test
+    @DisplayName("POST /temporadas/virada: 200 com a nova temporada")
+    void testVirarSucesso() throws Exception {
+        Temporada nova = new Temporada();
+        nova.setId(2027);
+        nova.setAno(2027);
+        nova.setStatus(StatusTemporada.VIGENTE);
+        Mockito.when(service.virarTemporada()).thenReturn(nova);
+
+        mockMvc.perform(post("/temporadas/virada"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(2027)))
+                .andExpect(jsonPath("$.status", is("VIGENTE")));
+    }
+
+    @Test
+    @DisplayName("POST /temporadas/virada: 409 com a mensagem quando a regra recusa")
+    void testVirarConflito() throws Exception {
+        Mockito.when(service.virarTemporada())
+                .thenThrow(new RegraNegocioException("A temporada 2028 só pode ser aberta a partir de 2027."));
+
+        mockMvc.perform(post("/temporadas/virada"))
+                .andExpect(status().isConflict())
+                .andExpect(content().string("A temporada 2028 só pode ser aberta a partir de 2027."));
     }
 
     @Test

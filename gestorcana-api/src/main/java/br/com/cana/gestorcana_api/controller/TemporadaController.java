@@ -1,6 +1,8 @@
 package br.com.cana.gestorcana_api.controller;
 
+import br.com.cana.gestorcana_api.dto.ResumoViradaDTO;
 import br.com.cana.gestorcana_api.entity.Temporada;
+import br.com.cana.gestorcana_api.exception.RegraNegocioException;
 import br.com.cana.gestorcana_api.service.TemporadaService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +39,33 @@ public class TemporadaController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/vigente")
+    public ResponseEntity<Temporada> buscarVigente() {
+        return service.buscarVigente()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/virada/resumo")
+    public ResponseEntity<?> resumoVirada() {
+        try {
+            ResumoViradaDTO resumo = service.gerarResumoVirada();
+            return ResponseEntity.ok(resumo);
+        } catch (RegraNegocioException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/virada")
+    public ResponseEntity<?> virarTemporada() {
+        try {
+            Temporada nova = service.virarTemporada();
+            return ResponseEntity.ok(nova);
+        } catch (RegraNegocioException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
+    }
+
     @PostMapping
     public ResponseEntity<String> salvar(@RequestBody Temporada temporada) {
         String resultado = service.salvar(temporada);
@@ -57,11 +86,15 @@ public class TemporadaController {
     }
 
     @DeleteMapping("/{id:\\d+}")
-    public ResponseEntity<Void> deletar(@PathVariable Integer id) {
-        boolean deletou = service.deletar(id);
-        if (deletou) {
-            return ResponseEntity.noContent().build();
+    public ResponseEntity<String> deletar(@PathVariable Integer id) {
+        try {
+            boolean deletou = service.deletar(id);
+            if (deletou) {
+                return ResponseEntity.noContent().build();
+            }
+            return ResponseEntity.notFound().build();
+        } catch (RegraNegocioException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
-        return ResponseEntity.notFound().build();
     }
 }

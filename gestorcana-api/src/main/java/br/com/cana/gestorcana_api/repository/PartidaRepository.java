@@ -9,4 +9,8 @@ import java.util.List;
 @Repository
 public interface PartidaRepository extends JpaRepository<Partida, Integer> {
     List<Partida> findByTemporadaId(Integer temporadaId);
+
+    long countByTemporadaId(Integer temporadaId);
+
+    boolean existsByTemporadaId(Integer temporadaId);
 }
