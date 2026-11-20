@@ -103,6 +103,35 @@ public class ApiClient {
         return response.body();
     }
 
+    // POST/PUT que falham com a mensagem da API quando ela recusa (status >= 300).
+    // post()/put() devolvem o corpo de qualquer resposta, então um 400 com
+    // "A camisa número 10 já pertence a outro jogador!" parecia sucesso.
+    public static String postOuFalha(String endpoint, String jsonBody) throws Exception {
+        return enviarOuFalha(HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + endpoint))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build());
+    }
+
+    public static String putOuFalha(String endpoint, String jsonBody) throws Exception {
+        return enviarOuFalha(HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + endpoint))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build());
+    }
+
+    private static String enviarOuFalha(HttpRequest request) throws Exception {
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        String corpo = response.body();
+        if (response.statusCode() >= 300) {
+            throw new Exception(corpo != null && !corpo.isBlank() ? corpo : "HTTP " + response.statusCode());
+        }
+        return corpo;
+    }
+
     // Método genérico para DELETE (Excluir)
     public static void delete(String endpoint) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()

@@ -55,6 +55,20 @@ class PlayerFormControllers {
   final TextEditingController altura;
   final TextEditingController peso;
 
+  /// Strips non-digits and clamps to [maxLen]. Legacy records can have a
+  /// phone/CEP value already at (or past) the length the field's
+  /// [LengthLimitingTextInputFormatter] enforces; assigning that raw value
+  /// straight to the controller's `.text` bypasses `inputFormatters`
+  /// (they only run on user-driven edits), so the field loads "already
+  /// full". From then on, every keystroke with a collapsed selection hits
+  /// the formatter's "already at maxLength" branch and is silently
+  /// dropped — no error, the field just looks frozen. Clamping here keeps
+  /// the controller in a state the formatter would have produced itself.
+  String _digitsClamped(String? raw, int maxLen) {
+    final String digits = (raw ?? '').replaceAll(RegExp(r'\D'), '');
+    return digits.length > maxLen ? digits.substring(0, maxLen) : digits;
+  }
+
   void preencherDe(Jogador jogador) {
     nome.text = jogador.nome;
     apelido.text = jogador.apelido ?? '';
@@ -62,15 +76,15 @@ class PlayerFormControllers {
     dataAdmissao.text = DateFormatUtils.paraUsuario(jogador.dataAdmissao);
     cpf.text = jogador.cpf ?? '';
     rg.text = jogador.rg ?? '';
-    telefone.text = jogador.telefone ?? '';
-    telefoneEmergencia.text = jogador.telefoneEmergencia ?? '';
+    telefone.text = _digitsClamped(jogador.telefone, 11);
+    telefoneEmergencia.text = _digitsClamped(jogador.telefoneEmergencia, 11);
     logradouro.text = jogador.endereco.logradouro ?? '';
     numero.text = jogador.endereco.numero ?? '';
     complemento.text = jogador.endereco.complemento ?? '';
     bairro.text = jogador.endereco.bairro ?? '';
     cidade.text = jogador.endereco.cidade ?? '';
     estado.text = jogador.endereco.estado ?? '';
-    cep.text = jogador.endereco.cep ?? '';
+    cep.text = _digitsClamped(jogador.endereco.cep, 8);
     timeAnterior.text = jogador.timeAnterior ?? '';
     tempoExperiencia.text = jogador.tempoExperiencia?.toString() ?? '';
     grauRelacaoPadrinho.text = jogador.grauRelacaoPadrinho ?? '';

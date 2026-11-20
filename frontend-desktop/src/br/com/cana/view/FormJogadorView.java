@@ -270,15 +270,22 @@ public class FormJogadorView extends JFrame {
             String resultado;
             if (jogadorAtual.getId() != null && jogadorAtual.getId() > 0) {
                 System.out.println(">>> Enviando PUT para a API...");
-                resultado = ApiClient.put("/jogadores/" + jogadorAtual.getId(), payload);
+                resultado = ApiClient.putOuFalha("/jogadores/" + jogadorAtual.getId(), payload);
             } else {
                 System.out.println(">>> Enviando POST para a API...");
-                resultado = ApiClient.post("/jogadores", payload);
+                resultado = ApiClient.postOuFalha("/jogadores", payload);
             }
 
             System.out.println(">>> Resposta da API: " + resultado);
 
-            if (resultado != null) {
+            // A API devolve o jogador salvo; sem um id nele, nada foi gravado.
+            Jogador salvo = null;
+            try {
+                salvo = ApiClient.GSON.fromJson(resultado, Jogador.class);
+            } catch (Exception ignorado) {
+            }
+
+            if (salvo != null && salvo.getId() != null && salvo.getId() > 0) {
                 JOptionPane.showMessageDialog(this, "Jogador salvo com sucesso!");
 
                 limparCampos();
@@ -288,13 +295,14 @@ public class FormJogadorView extends JFrame {
                 bloquearCampos(true);
                 carregarPadrinhos();
             } else {
-                JOptionPane.showMessageDialog(this, "Erro ao salvar jogador (API retornou nulo).", "Aviso",
-                        JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this,
+                        "O jogador NÃO foi salvo. Resposta inesperada da API:\n" + resultado, "Erro",
+                        JOptionPane.ERROR_MESSAGE);
             }
 
         } catch (Exception ex) {
             ex.printStackTrace(); // 👈 Imprime o erro detalhado no terminal
-            JOptionPane.showMessageDialog(this, "Erro ao processar/salvar jogador: " + ex.getMessage(), "Erro",
+            JOptionPane.showMessageDialog(this, "O jogador NÃO foi salvo.\n\n" + ex.getMessage(), "Erro",
                     JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -435,19 +443,37 @@ public class FormJogadorView extends JFrame {
         jogadorAtual.setGrauRelacaoPadrinho(txtGrauRelacao.getText().trim());
     }
 
+    /**
+     * Seleciona o item ignorando maiúsculas/minúsculas (o mobile grava "VOLANTE",
+     * o desktop exibe "Volante"). Sem isso o combo ficava no primeiro item
+     * ("Goleiro") e um novo salvamento sobrescrevia a posição real.
+     */
+    private void selecionarItem(JComboBox<String> combo, String valor) {
+        if (valor == null || valor.trim().isEmpty()) return;
+        for (int i = 0; i < combo.getItemCount(); i++) {
+            if (combo.getItemAt(i).equalsIgnoreCase(valor.trim())) {
+                combo.setSelectedIndex(i);
+                return;
+            }
+        }
+        // Valor desconhecido: mantém o original em vez de trocar silenciosamente.
+        combo.addItem(valor);
+        combo.setSelectedItem(valor);
+    }
+
     private void preencherCampos() {
         txtNome.setText(jogadorAtual.getNome());
         txtApelido.setText(jogadorAtual.getApelido());
         txtDataNasc.setText(br.com.cana.util.DateUtil.paraUsuario(jogadorAtual.getDataNasc()));
         txtDataAdmissao.setText(br.com.cana.util.DateUtil.paraUsuario(jogadorAtual.getDataAdmissao()));
-        txtCPF.setText(jogadorAtual.getCpf());
+        preencherMascarado(txtCPF, jogadorAtual.getCpf());
         txtRG.setText(jogadorAtual.getRg());
-        txtTelefone.setValue(jogadorAtual.getTelefone());
-        txtTelEmergencia.setValue(jogadorAtual.getTelefoneEmergencia());
+        preencherMascarado(txtTelefone, jogadorAtual.getTelefone());
+        preencherMascarado(txtTelEmergencia, jogadorAtual.getTelefoneEmergencia());
 
         Endereco end = jogadorAtual.getEndereco();
         if (end != null) {
-            txtCEP.setValue(end.getCep());
+            preencherMascarado(txtCEP, end.getCep());
             txtLogradouro.setText(end.getLogradouro());
             txtNum.setText(end.getNumero());
             txtComplemento.setText(end.getComplemento());
@@ -456,8 +482,12 @@ public class FormJogadorView extends JFrame {
             txtUF.setText(end.getEstado());
         }
 
-        cbPosicao.setSelectedItem(jogadorAtual.getPosicao());
-        cbPeDominante.setSelectedItem(jogadorAtual.getPeDominante());
+        selecionarItem(cbPosicao, jogadorAtual.getPosicao());
+        String pe = jogadorAtual.getPeDominante();
+        // O mobile grava "DIREITO"/"ESQUERDO"; aqui usamos "Destro"/"Canhoto".
+        if ("DIREITO".equalsIgnoreCase(pe)) pe = "Destro";
+        else if ("ESQUERDO".equalsIgnoreCase(pe)) pe = "Canhoto";
+        selecionarItem(cbPeDominante, pe);
         spAltura.setValue(jogadorAtual.getAltura());
         spPeso.setValue(jogadorAtual.getPeso());
         spNivel.setValue(jogadorAtual.getNivel());
@@ -524,6 +554,32 @@ public class FormJogadorView extends JFrame {
         btn.setHorizontalTextPosition(SwingConstants.CENTER);
         btn.setFocusable(false);
         return btn;
+    }
+
+    /**
+     * Preenche um campo com máscara a partir do valor salvo. O mobile grava só
+     * os dígitos (ex.: CEP "13560000"), que não casam com a máscara "#####-###"
+     * e o campo ficava em branco. Aqui os dígitos são encaixados na máscara.
+     */
+    private void preencherMascarado(JFormattedTextField campo, String valor) {
+        String digitos = valor == null ? "" : valor.replaceAll("[^0-9]", "");
+        if (digitos.isEmpty()) {
+            campo.setValue(null);
+            return;
+        }
+        if (campo.getFormatter() instanceof MaskFormatter mf) {
+            String mascara = mf.getMask();
+            if (mascara.chars().filter(c -> c == '#').count() == digitos.length()) {
+                StringBuilder sb = new StringBuilder();
+                int d = 0;
+                for (char c : mascara.toCharArray()) {
+                    sb.append(c == '#' ? digitos.charAt(d++) : c);
+                }
+                campo.setValue(sb.toString());
+                return;
+            }
+        }
+        campo.setValue(valor);
     }
 
     private JFormattedTextField criarCampoFormatado(String mascara) {

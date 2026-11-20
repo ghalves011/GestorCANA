@@ -13,6 +13,10 @@ public class Temporada {
     @Column(nullable = false)
     private Integer ano;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private StatusTemporada status = StatusTemporada.ENCERRADA;
+
     // --- GETTERS E SETTERS ---
 
     public Integer getId() { return id; }
@@ -20,4 +24,7 @@ public class Temporada {
 
     public Integer getAno() { return ano; }
     public void setAno(Integer ano) { this.ano = ano; }
+
+    public StatusTemporada getStatus() { return status; }
+    public void setStatus(StatusTemporada status) { this.status = status; }
 }
