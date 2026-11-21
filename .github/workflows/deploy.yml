@@ -33,4 +33,5 @@ jobs:
             docker run -d --restart=always --name gestorcanaapi-deploy-container \
               -e DB_USERNAME='${{ secrets.DB_USERNAME }}' \
               -e DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
+              -e GESTORCANA_API_KEY='${{ secrets.GESTORCANA_API_KEY }}' \
               -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/gestorcanaapi-deploy:latest

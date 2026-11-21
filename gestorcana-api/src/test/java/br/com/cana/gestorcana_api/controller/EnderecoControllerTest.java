@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -24,6 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(EnderecoController.class)
+@TestPropertySource(properties = "gestorcana.api-key=chave-de-teste")
 class EnderecoControllerTest {
 
     @Autowired
@@ -128,6 +130,7 @@ class EnderecoControllerTest {
         Mockito.when(enderecoService.deletar(eq(1))).thenReturn(true);
 
         mockMvc.perform(delete("/enderecos/1")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNoContent());
     }
@@ -138,6 +141,7 @@ class EnderecoControllerTest {
         Mockito.when(enderecoService.deletar(eq(99))).thenReturn(false);
 
         mockMvc.perform(delete("/enderecos/99")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound());
     }

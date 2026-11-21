@@ -45,4 +45,25 @@ class AppConfig {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
   }
+
+  // Chave de acesso enviada no cabeçalho X-API-KEY. A API exige essa chave em
+  // DELETE e nas alterações de temporada. Fica só no aparelho, nunca no código.
+  static const String _apiKeyPrefsKey = 'api_key';
+
+  /// Devolve a chave salva, ou '' se não houver.
+  static Future<String> getApiKey() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_apiKeyPrefsKey) ?? '').trim();
+  }
+
+  /// Salva a chave; vazia remove.
+  static Future<void> setApiKey(String chave) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String trimmed = chave.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_apiKeyPrefsKey);
+    } else {
+      await prefs.setString(_apiKeyPrefsKey, trimmed);
+    }
+  }
 }

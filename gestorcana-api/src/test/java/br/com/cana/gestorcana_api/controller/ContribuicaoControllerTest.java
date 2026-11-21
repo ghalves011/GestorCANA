@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
+@TestPropertySource(properties = "gestorcana.api-key=chave-de-teste")
 @AutoConfigureMockMvc
 @Transactional // 🛡️ Rollback automático
 class ContribuicaoControllerTest {
@@ -60,6 +62,7 @@ class ContribuicaoControllerTest {
     @DisplayName("4. Deve testar exclusão de pagamento de mensalidade")
     void deveExcluirPagamento() throws Exception {
         mockMvc.perform(delete("/contribuicoes")
+                .header("X-API-KEY", "chave-de-teste")
                 .param("jogadorId", "999999")
                 .param("mes", "8")
                 .param("ano", "2026"))

@@ -9,7 +9,14 @@ final StateProvider<String> baseUrlProvider = StateProvider<String>(
   (Ref ref) => 'http://157.151.15.177:8080',
 );
 
-Dio buildDio(String baseUrl) {
+/// Chave de acesso (X-API-KEY) ativa. Carregada no boot em main.dart
+/// (AppConfig.getApiKey) e atualizada pela tela de Configurações.
+/// Vazia = o cabeçalho não é enviado.
+final StateProvider<String> apiKeyProvider = StateProvider<String>(
+  (Ref ref) => '',
+);
+
+Dio buildDio(String baseUrl, {String apiKey = ''}) {
   final Dio dio = Dio(
     BaseOptions(
       baseUrl: baseUrl,
@@ -18,6 +25,7 @@ Dio buildDio(String baseUrl) {
       sendTimeout: const Duration(seconds: 20),
       headers: <String, String>{
         'Accept': 'application/json; charset=UTF-8',
+        if (apiKey.isNotEmpty) 'X-API-KEY': apiKey,
       },
       // Some endpoints return a bare quoted string ("OK") or plain text
       // instead of a JSON object; validateStatus keeps Dio from throwing
@@ -28,6 +36,8 @@ Dio buildDio(String baseUrl) {
 
   dio.interceptors.add(
     LogInterceptor(
+      // Sem cabeçalhos no log, para a chave de acesso não aparecer no console.
+      requestHeader: false,
       requestBody: true,
       responseBody: true,
       logPrint: (Object obj) {
@@ -43,5 +53,6 @@ Dio buildDio(String baseUrl) {
 
 final Provider<Dio> dioProvider = Provider<Dio>((Ref ref) {
   final String baseUrl = ref.watch(baseUrlProvider);
-  return buildDio(baseUrl);
+  final String apiKey = ref.watch(apiKeyProvider);
+  return buildDio(baseUrl, apiKey: apiKey);
 });

@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TemporadaController.class)
+@TestPropertySource(properties = "gestorcana.api-key=chave-de-teste")
 class TemporadaControllerTest {
 
     @Autowired
@@ -98,6 +100,7 @@ class TemporadaControllerTest {
         Mockito.when(service.salvar(any(Temporada.class))).thenReturn("OK");
 
         mockMvc.perform(post("/temporadas")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(temporadaExemplo)))
                 .andExpect(status().isCreated())
@@ -111,6 +114,7 @@ class TemporadaControllerTest {
                 .thenReturn("Erro: Ano inválido (deve estar entre 2000 e 2100).");
 
         mockMvc.perform(post("/temporadas")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(temporadaExemplo)))
                 .andExpect(status().isBadRequest())
@@ -123,6 +127,7 @@ class TemporadaControllerTest {
         Mockito.when(service.deletar(eq(1))).thenReturn(true);
 
         mockMvc.perform(delete("/temporadas/1")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNoContent());
     }
@@ -133,7 +138,8 @@ class TemporadaControllerTest {
         Mockito.when(service.deletar(eq(2026)))
                 .thenThrow(new RegraNegocioException("Não é possível excluir a temporada vigente."));
 
-        mockMvc.perform(delete("/temporadas/2026"))
+        mockMvc.perform(delete("/temporadas/2026")
+                .header("X-API-KEY", "chave-de-teste"))
                 .andExpect(status().isConflict())
                 .andExpect(content().string("Não é possível excluir a temporada vigente."));
     }
@@ -176,7 +182,8 @@ class TemporadaControllerTest {
         nova.setStatus(StatusTemporada.VIGENTE);
         Mockito.when(service.virarTemporada()).thenReturn(nova);
 
-        mockMvc.perform(post("/temporadas/virada"))
+        mockMvc.perform(post("/temporadas/virada")
+                .header("X-API-KEY", "chave-de-teste"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(2027)))
                 .andExpect(jsonPath("$.status", is("VIGENTE")));
@@ -188,7 +195,8 @@ class TemporadaControllerTest {
         Mockito.when(service.virarTemporada())
                 .thenThrow(new RegraNegocioException("A temporada 2028 só pode ser aberta a partir de 2027."));
 
-        mockMvc.perform(post("/temporadas/virada"))
+        mockMvc.perform(post("/temporadas/virada")
+                .header("X-API-KEY", "chave-de-teste"))
                 .andExpect(status().isConflict())
                 .andExpect(content().string("A temporada 2028 só pode ser aberta a partir de 2027."));
     }
@@ -199,6 +207,7 @@ class TemporadaControllerTest {
         Mockito.when(service.deletar(eq(99))).thenReturn(false);
 
         mockMvc.perform(delete("/temporadas/99")
+                .header("X-API-KEY", "chave-de-teste")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound());
     }

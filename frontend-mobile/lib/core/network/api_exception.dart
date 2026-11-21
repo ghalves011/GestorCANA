@@ -15,6 +15,14 @@ class ApiException implements Exception {
     final int? status = error.response?.statusCode;
     final dynamic data = error.response?.data;
 
+    // 401 = a API recusou a chave (X-API-KEY) numa ação protegida.
+    if (status == 401) {
+      return ApiException(
+        'Esta ação exige a chave de acesso. Salve a chave em Configurações > Chave de acesso.',
+        statusCode: status,
+      );
+    }
+
     if (data != null) {
       final String text = data is String ? unwrapQuotedString(data) : data.toString();
       if (text.trim().isNotEmpty) {

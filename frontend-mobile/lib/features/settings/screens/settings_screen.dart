@@ -19,17 +19,34 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late final TextEditingController _controller;
+  late final TextEditingController _chaveController;
+  bool _mostrarChave = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: ref.read(baseUrlProvider));
+    _chaveController = TextEditingController(text: ref.read(apiKeyProvider));
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _chaveController.dispose();
     super.dispose();
+  }
+
+  Future<void> _salvarChave() async {
+    final String chave = _chaveController.text.trim();
+    await AppConfig.setApiKey(chave);
+    ref.read(apiKeyProvider.notifier).state = chave;
+    if (mounted) {
+      await showMessageDialog(
+        context,
+        title: 'Configurações',
+        message: chave.isEmpty ? 'Chave de acesso removida.' : 'Chave de acesso salva.',
+      );
+    }
   }
 
   Future<void> _salvar() async {
@@ -74,6 +91,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          Text('Chave de acesso', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Exigida para excluir registros e para virar a temporada. Deixe vazio e salve para remover.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _chaveController,
+            obscureText: !_mostrarChave,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              hintText: 'Cole a chave aqui',
+              suffixIcon: IconButton(
+                tooltip: _mostrarChave ? 'Ocultar' : 'Mostrar',
+                icon: Icon(_mostrarChave ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _mostrarChave = !_mostrarChave),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(onPressed: _salvarChave, child: const Text('Salvar chave')),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 12),
