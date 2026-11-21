@@ -18,7 +18,19 @@ import com.google.gson.JsonSerializer;
 
 public class ApiClient {
 
-    private static final String BASE_URL = "http://157.151.15.177:8080";
+    // Produção por padrão. Para testar contra outra API sem alterar o código:
+    // java -Dgestorcana.api.url=http://localhost:8080 -jar frontend-desktop.jar
+    private static final String BASE_URL = carregarBaseUrl();
+
+    private static String carregarBaseUrl() {
+        String url = System.getProperty("gestorcana.api.url");
+        if (url == null || url.isBlank()) {
+            return "http://157.151.15.177:8080";
+        }
+        url = url.trim().replaceAll("/+$", "");
+        System.err.println("⚠️ API alternativa em uso: " + url);
+        return url;
+    }
     private static final HttpClient client = HttpClient.newHttpClient();
 
     // Chave exigida pela API em DELETE e nas alterações de temporada (cabeçalho X-API-KEY).
@@ -121,6 +133,33 @@ public class ApiClient {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         verificarChave(response);
+        return response.body();
+    }
+
+    // GET que falha com a mensagem da API quando ela recusa (status >= 300).
+    public static String getOuFalha(String endpoint) throws Exception {
+        return enviarOuFalha(requisicao(endpoint)
+                .header("Accept", "application/json; charset=UTF-8")
+                .GET()
+                .build());
+    }
+
+    // GET que devolve null no 404 (ex.: nenhuma temporada vigente) e falha nos demais erros.
+    public static String getOuNulo(String endpoint) throws Exception {
+        HttpRequest request = requisicao(endpoint)
+                .header("Accept", "application/json; charset=UTF-8")
+                .GET()
+                .build();
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        verificarChave(response);
+        if (response.statusCode() >= 300) {
+            String corpo = response.body();
+            throw new Exception(corpo != null && !corpo.isBlank() ? corpo : "HTTP " + response.statusCode());
+        }
         return response.body();
     }
 

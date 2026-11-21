@@ -36,6 +36,17 @@ class TemporadaRepository {
     }
   }
 
+  /// GET /temporadas/vigente. Devolve null quando não há temporada vigente (404).
+  Future<Temporada?> obterVigente() async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>('/temporadas/vigente');
+      return Temporada.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiException.fromDioException(e);
+    }
+  }
+
   Future<Temporada?> obterPorAno(int ano) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>('/temporadas/ano/$ano');

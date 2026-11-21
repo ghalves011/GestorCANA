@@ -210,7 +210,21 @@ public class TelaGeracaoPartidaView extends JFrame {
             // 2. MONTAGEM DO OBJETO PARTIDA
             br.com.cana.model.Partida novaPartida = new br.com.cana.model.Partida();
             novaPartida.setNomePartida(nome);
-            novaPartida.setTemporadaId(2026); // Temporada ADS 2026
+            // A partida entra na temporada vigente da API (id da temporada = ano).
+            try {
+                br.com.cana.model.Temporada vigente = br.com.cana.service.TemporadaService.obterVigente();
+                if (vigente == null || vigente.getId() == null) {
+                    JOptionPane.showMessageDialog(this,
+                            "Não há temporada vigente na API. Abra a temporada antes de criar a partida.",
+                            "Temporada não encontrada", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                novaPartida.setTemporadaId(vigente.getId());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Erro ao buscar a temporada vigente: " + ex.getMessage(),
+                        "Erro", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
             // 📆 CONVERSÃO DO LOCALDATE
             try {

@@ -9,7 +9,9 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import br.com.cana.util.ImagemUtil;
 import br.com.cana.model.Partida;
+import br.com.cana.model.Temporada;
 import br.com.cana.service.ApiClient;
+import br.com.cana.service.TemporadaService;
 
 /**
  * Projeto: Gestor de Partidas CANA
@@ -21,7 +23,7 @@ public class TelaConsultaPartidaView extends JFrame {
 
     private JTable tabela;
     private DefaultTableModel model;
-    private JComboBox<String> cbPeriodo;
+    private JComboBox<Temporada> cbPeriodo;
 
     // ⚽ CONTROLE DE DADOS
     private List<Partida> partidasCarregadas;
@@ -46,9 +48,17 @@ public class TelaConsultaPartidaView extends JFrame {
         lblFiltro.setFont(new Font("SansSerif", Font.BOLD, 14));
         painelTopo.add(lblFiltro);
 
-        String[] periodos = { "Todas (Temporada 2026)" };
-        cbPeriodo = new JComboBox<>(periodos);
+        // Temporadas vindas da API; o combo guarda o próprio objeto Temporada.
+        cbPeriodo = new JComboBox<>();
         cbPeriodo.setPreferredSize(new Dimension(250, 30));
+        try {
+            TemporadaService.preencherCombo(cbPeriodo);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao carregar as temporadas da API: " + ex.getMessage(),
+                    "Erro de Conexão", JOptionPane.ERROR_MESSAGE);
+        }
+        // Registrado depois de preencher, para não disparar antes da tabela existir.
+        cbPeriodo.addActionListener(e -> carregarPartidasDoBanco());
         painelTopo.add(cbPeriodo);
 
         add(painelTopo, BorderLayout.NORTH);
@@ -133,10 +143,16 @@ public class TelaConsultaPartidaView extends JFrame {
 
     private void carregarPartidasDoBanco() {
         model.setRowCount(0);
+        partidasCarregadas = null;
+
+        Temporada temporada = (Temporada) cbPeriodo.getSelectedItem();
+        if (temporada == null || temporada.getId() == null) {
+            return; // Sem temporada (API fora do ar ou nenhuma cadastrada): tabela vazia
+        }
 
         try {
-            // Busca as partidas via API
-            String json = ApiClient.get("/partidas?temporada=2026");
+            // Busca as partidas da temporada escolhida via API (id da temporada = ano)
+            String json = ApiClient.get("/partidas?temporada=" + temporada.getId());
 
             java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<java.util.List<Partida>>() {
             }.getType();

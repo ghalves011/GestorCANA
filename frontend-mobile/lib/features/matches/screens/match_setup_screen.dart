@@ -12,7 +12,6 @@ import '../../contributions/providers/contribuicao_providers.dart';
 import '../models/partida.dart';
 import '../models/temporada.dart';
 import '../providers/partida_providers.dart';
-import '../providers/season_provider.dart';
 import 'attendance_selection_screen.dart';
 import 'match_live_screen.dart';
 
@@ -107,21 +106,14 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
 
     setState(() => _sorteando = true);
     try {
-      final int ano = ref.read(temporadaSelecionadaProvider);
-      final List<Temporada> temporadas = await ref.read(temporadaRepositoryProvider).listar();
-      Temporada? temporadaAtual;
-      for (final Temporada t in temporadas) {
-        if (t.ano == ano) {
-          temporadaAtual = t;
-          break;
-        }
-      }
+      // A partida entra na temporada vigente da API, e não na do ano do relógio.
+      final Temporada? temporadaAtual = await ref.read(temporadaRepositoryProvider).obterVigente();
       if (temporadaAtual == null || temporadaAtual.id == null) {
         if (mounted) {
           await showMessageDialog(
             context,
             title: 'Temporada não encontrada',
-            message: 'Não existe uma temporada cadastrada para o ano $ano. Cadastre-a antes de criar a partida.',
+            message: 'Não há temporada vigente na API. Abra a temporada antes de criar a partida.',
           );
         }
         return;

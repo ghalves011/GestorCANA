@@ -78,7 +78,7 @@ public class TelaPartidaLiveView extends JFrame {
             dataPartida = partida.getDataPartida().format(formatoBR);
         }
 
-        String temporada = partida.getTemporadaId() != null ? String.valueOf(partida.getTemporadaId()) : "2026";
+        String temporada = partida.getTemporadaId() != null ? String.valueOf(partida.getTemporadaId()) : "-";
 
         setTitle((modoEdicao ? "CANA - Editar Partida - " : "CANA Live - ") + nomePartida);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);

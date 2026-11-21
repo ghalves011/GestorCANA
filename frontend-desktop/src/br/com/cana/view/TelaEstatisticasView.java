@@ -7,7 +7,9 @@ import javax.swing.table.TableRowSorter;
 
 import java.awt.*;
 
+import br.com.cana.model.Temporada;
 import br.com.cana.service.ApiClient;
+import br.com.cana.service.TemporadaService;
 import br.com.cana.util.ImagemUtil;
 
 /**
@@ -19,7 +21,7 @@ public class TelaEstatisticasView extends JFrame {
 
     private JTable tabela;
     private DefaultTableModel model;
-    private JComboBox<String> cbPeriodo;
+    private JComboBox<Temporada> cbPeriodo;
 
     public TelaEstatisticasView() {
 
@@ -42,35 +44,23 @@ public class TelaEstatisticasView extends JFrame {
         lblFiltro.setFont(new Font("SansSerif", Font.BOLD, 14));
         painelTopo.add(lblFiltro);
 
-        // Pega o ano atual do sistema (Ex: vai retornar 2026 agora, e 2027 no ano que
-        // vem)
-        int anoAtual = java.time.Year.now().getValue();
-
-        String[] periodos = { "Todas (Temporada 2026)" };
-        cbPeriodo = new JComboBox<>(periodos);
+        // Temporadas vindas da API, com a vigente pré-selecionada.
+        // O combo guarda o objeto Temporada, então não há texto para converter em número.
+        cbPeriodo = new JComboBox<>();
         cbPeriodo.setPreferredSize(new Dimension(250, 30));
+        try {
+            TemporadaService.preencherCombo(cbPeriodo);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao carregar as temporadas da API: " + ex.getMessage(),
+                    "Erro de Conexão", JOptionPane.ERROR_MESSAGE);
+        }
         painelTopo.add(cbPeriodo);
 
         add(painelTopo, BorderLayout.NORTH);
 
         // --- EVENTO DO JCOMBOBOX ---
-        cbPeriodo.addActionListener(e -> {
-            String selecao = (String) cbPeriodo.getSelectedItem();
-
-            if (selecao != null) {
-                // Remove tudo que não for número da String (Ex: "2026" fica "2026", e "Todas
-                // (2026)" também fica "2026")
-                String apenasNumeros = selecao.replaceAll("[^0-9]", "");
-
-                if (!apenasNumeros.isEmpty()) {
-                    // Converte a String "2026" para o número inteiro 2026
-                    int anoSelecionado = Integer.parseInt(apenasNumeros);
-
-                    // Manda pro banco buscar os dados dinamicamente!
-                    carregarEstatisticas(anoSelecionado);
-                }
-            }
-        });
+        // Registrado depois de preencher, para não disparar antes da tabela existir.
+        cbPeriodo.addActionListener(e -> carregarTemporadaSelecionada());
 
         // --- TABELA DE ESTATÍSTICAS (Região CENTRO) ---
         // Utilizando os ícones universais para dar a cara do rascunho
@@ -232,7 +222,16 @@ public class TelaEstatisticasView extends JFrame {
         JScrollPane scroll = new JScrollPane(tabela);
         add(scroll, BorderLayout.CENTER); // Preenche todo o resto da tela
 
-        carregarEstatisticas(anoAtual);
+        carregarTemporadaSelecionada();
+    }
+
+    private void carregarTemporadaSelecionada() {
+        Temporada temporada = (Temporada) cbPeriodo.getSelectedItem();
+        if (temporada == null || temporada.getId() == null) {
+            model.setRowCount(0); // Sem temporada: tabela vazia
+            return;
+        }
+        carregarEstatisticas(temporada.getId());
     }
 
     private void carregarEstatisticas(int temporadaId) {

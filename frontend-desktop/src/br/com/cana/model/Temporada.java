@@ -4,6 +4,7 @@ public class Temporada {
 
     private Integer id;
     private Integer ano;
+    private String status; // "VIGENTE" ou "ENCERRADA", vindo da API
 
     // Construtor vazio (obrigatório para desserialização REST)
     public Temporada() {
@@ -38,9 +39,28 @@ public class Temporada {
         this.ano = ano;
     }
 
-    // Facilita a exibição direta do ano em ComboBoxes (JComboBox) do Swing
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public boolean isVigente() {
+        return "VIGENTE".equalsIgnoreCase(status);
+    }
+
+    // Texto exibido nos ComboBoxes: "2027 (vigente)" ou "2026 (encerrada)".
+    // O combo guarda o próprio objeto, então nada precisa ser extraído deste texto.
     @Override
     public String toString() {
-        return this.ano != null ? String.valueOf(this.ano) : "";
+        if (this.ano == null) {
+            return "";
+        }
+        if (status == null || status.isBlank()) {
+            return String.valueOf(this.ano);
+        }
+        return this.ano + (isVigente() ? " (vigente)" : " (encerrada)");
     }
 }
