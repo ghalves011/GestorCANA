@@ -31,16 +31,21 @@ public class PartidaService {
     @Autowired
     private br.com.cana.gestorcana_api.repository.EventoRepository eventoRepository;
 
+    @Autowired
+    private CartoesVigentesService cartoesVigentesService;
+
     public PartidaService() {
     }
 
     public PartidaService(PartidaRepository partidaRepository, JogadorRepository jogadorRepository,
             ContribuicaoService contribuicaoService,
-            br.com.cana.gestorcana_api.repository.JogadorPartidaRepository jogadorPartidaRepository) {
+            br.com.cana.gestorcana_api.repository.JogadorPartidaRepository jogadorPartidaRepository,
+            CartoesVigentesService cartoesVigentesService) {
         this.partidaRepository = partidaRepository;
         this.jogadorRepository = jogadorRepository;
         // this.contribuicaoService = contribuicaoService;
         this.jogadorPartidaRepository = jogadorPartidaRepository;
+        this.cartoesVigentesService = cartoesVigentesService;
     }
 
     public List<Partida> listarTodas() {
@@ -377,8 +382,9 @@ public class PartidaService {
                     jogador.setcVermelhosIniciais(0);
                     jogadorRepository.save(jogador);
 
-                    // 👇 A MÁGICA: ZERA OS CARTÕES DO HISTÓRICO, MANTENDO GOLS E PRESENÇA INTACTOS
-                    List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = jogadorPartidaRepository.findByJogadorId(jogador.getId());
+                    // 👇 A MÁGICA: ZERA OS CARTÕES DA TEMPORADA VIGENTE, MANTENDO GOLS E PRESENÇA INTACTOS.
+                    // Os cartões das temporadas encerradas ficam preservados no histórico.
+                    List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = cartoesVigentesService.buscarAtuacoes(jogador.getId());
                     for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : atuacoes) {
                         if ((jp.getCartaoAmarelo() != null && jp.getCartaoAmarelo() > 0) || 
                             (jp.getCartaoVermelho() != null && jp.getCartaoVermelho() > 0)) {
@@ -878,6 +884,8 @@ public class PartidaService {
     }
 
     private void consolidarEstatisticasJTable(Partida partida, String gridJson, String time) {
+        boolean contaParaSuspensao = cartoesVigentesService.partidaConta(partida.getTemporadaId());
+
         for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : montarAtuacoesDoGrid(partida, gridJson, time)) {
             Jogador jogador = jp.getJogador();
             int amarelosNaPartida = jp.getCartaoAmarelo();
@@ -886,12 +894,16 @@ public class PartidaService {
             // 1. Salva a atuação da partida atual no banco
             jogadorPartidaRepository.save(jp);
 
+            // Partida de temporada encerrada só entra no histórico, não suspende (RN12)
+            if (!contaParaSuspensao)
+                continue;
+
             // =========================================================================
             // 2. AVALIAÇÃO DE SUSPENSÃO (Sem o "if" limitador)
             // =========================================================================
             int totalAmarelosAtuais = jogador.getcAmarelosIniciais() != null ? jogador.getcAmarelosIniciais() : 0;
 
-            List<br.com.cana.gestorcana_api.entity.JogadorPartida> historico = jogadorPartidaRepository.findByJogadorId(jogador.getId());
+            List<br.com.cana.gestorcana_api.entity.JogadorPartida> historico = cartoesVigentesService.buscarAtuacoes(jogador.getId());
 
             for (br.com.cana.gestorcana_api.entity.JogadorPartida histJp : historico) {
                 // Ignora a partida atual que acabou de ser gravada para não somar em dobro
@@ -902,7 +914,7 @@ public class PartidaService {
 
             int amarelosFinais = totalAmarelosAtuais + amarelosNaPartida;
 
-            // Se tomou vermelho direto OU acumulou 3 amarelos no total geral do campeonato:
+            // Se tomou vermelho direto OU acumulou 3 amarelos na temporada vigente:
             if (vermelhosNaPartida > 0 || amarelosFinais >= 3) {
                 jogador.setEstaSuspenso(true);
                 jogador.setStatus("Suspenso");
@@ -1262,8 +1274,11 @@ public class PartidaService {
         jogadorPartidaRepository.saveAll(novasAtuacoes);
         jogadorPartidaRepository.flush();
 
-        for (Integer jogadorId : jogadoresAfetados) {
-            reavaliarSuspensao(jogadorId, jogadoresComCartaoReduzido.contains(jogadorId));
+        // Cartões de temporada encerrada não geram nem retiram suspensão (RN12)
+        if (cartoesVigentesService.partidaConta(partida.getTemporadaId())) {
+            for (Integer jogadorId : jogadoresAfetados) {
+                reavaliarSuspensao(jogadorId, jogadoresComCartaoReduzido.contains(jogadorId));
+            }
         }
 
         // Quem entrou na arbitragem pela edição cumpre a suspensão, como no Finalizar
@@ -1296,6 +1311,10 @@ public class PartidaService {
         partidaRepository.delete(partida);
         partidaRepository.flush();
 
+        // Cartões de temporada encerrada não geram nem retiram suspensão (RN12)
+        if (!cartoesVigentesService.partidaConta(partida.getTemporadaId())) {
+            return true;
+        }
         for (Map.Entry<Integer, int[]> e : cartoesGravados.entrySet()) {
             if (e.getValue()[0] > 0 || e.getValue()[1] > 0) {
                 reavaliarSuspensao(e.getKey(), true);
@@ -1339,8 +1358,8 @@ public class PartidaService {
     }
 
     /**
-     * Suspensão pela regra do Finalizar, olhando os cartões ainda pendentes no
-     * histórico (os já cumpridos foram zerados). Só tira a suspensão quando a
+     * Suspensão pela regra do Finalizar, olhando os cartões ainda pendentes na
+     * temporada vigente (os já cumpridos foram zerados). Só tira a suspensão quando a
      * edição reduziu cartões do jogador.
      */
     private void reavaliarSuspensao(Integer jogadorId, boolean podeRetirarSuspensao) {
@@ -1350,7 +1369,7 @@ public class PartidaService {
 
         int amarelos = jogador.getcAmarelosIniciais() != null ? jogador.getcAmarelosIniciais() : 0;
         int vermelhos = 0;
-        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : jogadorPartidaRepository.findByJogadorId(jogadorId)) {
+        for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : cartoesVigentesService.buscarAtuacoes(jogadorId)) {
             amarelos += jp.getCartaoAmarelo();
             vermelhos += jp.getCartaoVermelho();
         }

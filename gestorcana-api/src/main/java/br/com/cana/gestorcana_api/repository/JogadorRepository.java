@@ -3,6 +3,7 @@ package br.com.cana.gestorcana_api.repository;
 import br.com.cana.gestorcana_api.entity.Jogador;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -36,4 +37,10 @@ public interface JogadorRepository extends JpaRepository<Jogador, Integer> {
     @Query("SELECT CASE WHEN j.apelido IS NULL OR TRIM(j.apelido) = '' THEN j.nome ELSE j.apelido END "
             + "FROM Jogador j WHERE j.estaSuspenso = true AND (j.ativo IS NULL OR j.ativo = true)")
     List<String> listarNomesSuspensosAtivos();
+
+    // Virada de temporada (RN12): libera todos os suspensos, inclusive os inativos.
+    // Devolve quantos foram liberados.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Jogador j SET j.estaSuspenso = false WHERE j.estaSuspenso = true")
+    int liberarTodosSuspensos();
 }

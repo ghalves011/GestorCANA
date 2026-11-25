@@ -7,11 +7,11 @@ import br.com.cana.gestorcana_api.repository.EventoRepository;
 import br.com.cana.gestorcana_api.repository.JogadorPartidaRepository;
 import br.com.cana.gestorcana_api.repository.JogadorRepository;
 import br.com.cana.gestorcana_api.repository.PartidaRepository;
+import br.com.cana.gestorcana_api.repository.TemporadaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -40,13 +40,15 @@ class PartidaServiceTest {
     @Mock
     private EventoRepository eventoRepository;
 
-    @InjectMocks
     private PartidaService service;
 
     private final List<Jogador> cadastro = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
+        // Sem temporada vigente: nestes testes valem os cartões de todas as temporadas
+        service = new PartidaService(partidaRepository, jogadorRepository, null, jogadorPartidaRepository,
+                new CartoesVigentesService(jogadorPartidaRepository, mock(TemporadaRepository.class)));
         when(jogadorRepository.findById(anyInt())).thenAnswer(inv -> cadastro.stream()
                 .filter(j -> j.getId().equals(inv.getArgument(0))).findFirst());
         when(jogadorRepository.findByApelidoIgnoreCase(anyString())).thenAnswer(inv -> cadastro.stream()

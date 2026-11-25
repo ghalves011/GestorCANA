@@ -20,6 +20,7 @@ import org.mockito.quality.Strictness;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -88,8 +89,12 @@ class TemporadaServiceTest {
         ordem.verify(repository).saveAndFlush(t2026);
         ordem.verify(repository).inserirVigenteComIdIgualAoAno(2027);
 
-        // RN12 / RF02: nada de jogadores, partidas ou contribuições é alterado
-        verifyNoInteractions(jogadorRepository, partidaRepository, contribuicaoRepository);
+        // RN12: libera os suspensos depois de criar a nova; partidas e contribuições não mudam
+        InOrder liberacao = inOrder(repository, jogadorRepository);
+        liberacao.verify(repository).inserirVigenteComIdIgualAoAno(2027);
+        liberacao.verify(jogadorRepository).liberarTodosSuspensos();
+        verifyNoMoreInteractions(jogadorRepository);
+        verifyNoInteractions(partidaRepository, contribuicaoRepository);
     }
 
     @Test
@@ -150,7 +155,7 @@ class TemporadaServiceTest {
                 .thenReturn(Optional.of(temporada(2026, StatusTemporada.VIGENTE)));
         when(partidaRepository.countByTemporadaId(2026)).thenReturn(40L);
         when(jogadorRepository.listarNomesSuspensosAtivos()).thenReturn(List.of("Zé", "Bia"));
-        when(contribuicaoRepository.countByAnoAndPago(2026, 0)).thenReturn(7L);
+        when(contribuicaoRepository.contarPendentesVencidas(2026, 11)).thenReturn(7L);
         when(contribuicaoRepository.existsByAno(2027)).thenReturn(false);
 
         ResumoViradaDTO r = service.gerarResumoVirada();
@@ -162,6 +167,8 @@ class TemporadaServiceTest {
         assertEquals(7L, r.contribuicoesPendentesAnoAtual());
         assertFalse(r.loteAnoNovoJaGerado());
         assertTrue(r.avisos().contains("Lote de contribuições de 2027 ainda não foi gerado."));
+        assertTrue(r.avisos().contains("2 jogador(es) suspenso(s) serão liberados na virada."));
+        assertTrue(r.avisos().stream().noneMatch(a -> a.contains("continuam suspensos")));
         assertTrue(r.avisos().contains("Fazer backup antes de confirmar."));
 
         verify(repository, never()).save(any());
@@ -171,8 +178,35 @@ class TemporadaServiceTest {
         verify(partidaRepository, never()).save(any());
         verify(jogadorRepository, never()).save(any());
         verify(jogadorRepository, never()).saveAll(any());
+        verify(jogadorRepository, never()).liberarTodosSuspensos();
         verify(contribuicaoRepository, never()).save(any());
         verify(contribuicaoRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("Pendências: só meses vencidos (dia 10 ainda não vence, dia 11 vence)")
+    void ultimoMesVencido() {
+        assertEquals(10, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2026, 11, 10)));
+        assertEquals(11, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2026, 11, 11)));
+        assertEquals(0, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2026, 1, 10)));
+        assertEquals(1, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2026, 1, 11)));
+        assertEquals(12, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2026, 12, 11)));
+        assertEquals(12, TemporadaService.ultimoMesVencido(2026, LocalDate.of(2027, 1, 1)));
+        assertEquals(0, TemporadaService.ultimoMesVencido(2027, LocalDate.of(2026, 12, 31)));
+    }
+
+    @Test
+    @DisplayName("Pendências: a data de corte usa o fuso de São Paulo")
+    void pendenciasUsamFusoDeSaoPaulo() {
+        // 11/11 02:00 em UTC ainda é 10/11 23:00 em São Paulo: novembro não venceu
+        Clock virandoODia = Clock.fixed(Instant.parse("2026-11-11T02:00:00Z"), ZoneId.of("America/Sao_Paulo"));
+        service = new TemporadaService(repository, partidaRepository, jogadorRepository, contribuicaoRepository, virandoODia);
+        when(repository.findByStatus(StatusTemporada.VIGENTE))
+                .thenReturn(Optional.of(temporada(2026, StatusTemporada.VIGENTE)));
+
+        service.gerarResumoVirada();
+
+        verify(contribuicaoRepository).contarPendentesVencidas(2026, 10);
     }
 
     @Test

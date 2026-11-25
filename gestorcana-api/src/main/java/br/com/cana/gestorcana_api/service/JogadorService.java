@@ -28,6 +28,9 @@ public class JogadorService {
     private br.com.cana.gestorcana_api.repository.JogadorPartidaRepository jogadorPartidaRepository;
 
     @Autowired
+    private CartoesVigentesService cartoesVigentesService;
+
+    @Autowired
     private EnderecoRepository enderecoRepository;
 
     @Autowired
@@ -42,10 +45,12 @@ public class JogadorService {
     public JogadorService() {
     }
 
-    public JogadorService(JogadorRepository jogadorRepository, EnderecoRepository enderecoRepository, JogadorPartidaRepository jogadorPartidaRepository) {
+    public JogadorService(JogadorRepository jogadorRepository, EnderecoRepository enderecoRepository, JogadorPartidaRepository jogadorPartidaRepository,
+            CartoesVigentesService cartoesVigentesService) {
         this.jogadorRepository = jogadorRepository;
         this.enderecoRepository = enderecoRepository;
         this.jogadorPartidaRepository = jogadorPartidaRepository;
+        this.cartoesVigentesService = cartoesVigentesService;
     }
 
     /**
@@ -368,9 +373,9 @@ public class JogadorService {
         int totalAmarelos = j.getcAmarelosIniciais() != null ? j.getcAmarelosIniciais() : 0;
         int totalVermelhos = j.getcVermelhosIniciais() != null ? j.getcVermelhosIniciais() : 0;
 
-        // 2. Soma os cartões reais tomados em todas as partidas
-        List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = jogadorPartidaRepository
-                .findByJogadorId(j.getId());
+        // 2. Soma os cartões reais tomados nas partidas da temporada vigente (RN12)
+        List<br.com.cana.gestorcana_api.entity.JogadorPartida> atuacoes = cartoesVigentesService
+                .buscarAtuacoes(j.getId());
         if (atuacoes != null) {
             for (br.com.cana.gestorcana_api.entity.JogadorPartida jp : atuacoes) {
                 totalAmarelos += (jp.getCartaoAmarelo() != null ? jp.getCartaoAmarelo() : 0);
@@ -379,7 +384,7 @@ public class JogadorService {
         }
 
         // 3. Regra CANA: Suspenso se acumulou 3 amarelos ou tomou vermelho direto
-        boolean suspensoPorAmarelo = (totalAmarelos > 0 && totalAmarelos % 3 == 0);
+        boolean suspensoPorAmarelo = totalAmarelos >= 3;
         boolean suspensoPorVermelho = totalVermelhos > 0;
 
         // Se já estiver marcado manualmente ou pelos critérios acima:

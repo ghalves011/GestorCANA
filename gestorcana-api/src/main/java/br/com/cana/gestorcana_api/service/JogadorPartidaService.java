@@ -18,10 +18,14 @@ public class JogadorPartidaService {
     @Autowired
     private JogadorRepository jogadorRepository;
 
+    private final CartoesVigentesService cartoesVigentesService;
+
     @Autowired
-    public JogadorPartidaService(JogadorPartidaRepository jpRepository, JogadorRepository jogadorRepository) {
+    public JogadorPartidaService(JogadorPartidaRepository jpRepository, JogadorRepository jogadorRepository,
+            CartoesVigentesService cartoesVigentesService) {
         this.jpRepository = jpRepository;
         this.jogadorRepository = jogadorRepository;
+        this.cartoesVigentesService = cartoesVigentesService;
     }
 
     public JogadorPartida salvar(JogadorPartida jp) {
@@ -60,13 +64,15 @@ public class JogadorPartidaService {
         }
         jpRepository.save(jp);
 
-        // 🌟 Verifica acúmulo total do jogador em todas as partidas
-        List<JogadorPartida> historico = jpRepository.findByJogadorId(jp.getJogadorId());
+        // 🌟 Verifica o acúmulo do jogador na temporada vigente (RN12). Se esta partida não
+        // está entre as da vigente, ela é de temporada encerrada e não gera suspensão
+        List<JogadorPartida> historico = cartoesVigentesService.buscarAtuacoes(jp.getJogadorId());
+        boolean partidaConta = historico.stream().anyMatch(h -> jp.getPartidaId().equals(h.getPartidaId()));
         int totalAmarelos = historico.stream()
                 .mapToInt(h -> h.getCartaoAmarelo() != null ? h.getCartaoAmarelo() : 0)
                 .sum();
 
-        if (totalAmarelos >= 3) {
+        if (partidaConta && totalAmarelos >= 3) {
             jogadorRepository.findById(jp.getJogadorId()).ifPresent(j -> {
                 j.setEstaSuspenso(true);
                 j.setStatus("Suspenso");

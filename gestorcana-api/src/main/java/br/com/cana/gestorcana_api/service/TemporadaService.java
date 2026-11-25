@@ -8,11 +8,14 @@ import br.com.cana.gestorcana_api.repository.ContribuicaoRepository;
 import br.com.cana.gestorcana_api.repository.JogadorRepository;
 import br.com.cana.gestorcana_api.repository.PartidaRepository;
 import br.com.cana.gestorcana_api.repository.TemporadaRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.Year;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -21,6 +24,11 @@ import java.util.Optional;
 
 @Service
 public class TemporadaService {
+
+    private static final Logger log = LoggerFactory.getLogger(TemporadaService.class);
+
+    // A mensalidade vence no dia 10 (RN18)
+    private static final int DIA_VENCIMENTO = 10;
 
     private static final ZoneId FUSO_BRASIL = ZoneId.of("America/Sao_Paulo");
 
@@ -140,7 +148,7 @@ public class TemporadaService {
             avisos.add("Lote de contribuições de " + anoNovo + " ainda não foi gerado.");
         }
         if (!suspensos.isEmpty()) {
-            avisos.add(suspensos.size() + " jogador(es) continuam suspensos em " + anoNovo + ".");
+            avisos.add(suspensos.size() + " jogador(es) suspenso(s) serão liberados na virada.");
         }
         if (pendentes > 0) {
             avisos.add(pendentes + " contribuição(ões) de " + anoAtual + " continuam pendentes.");
@@ -157,7 +165,8 @@ public class TemporadaService {
 
     /**
      * Encerra a temporada vigente e abre a do ano seguinte (RN03: tudo ou nada).
-     * Não mexe em jogadores (a suspensão continua, RN12), partidas nem contribuições.
+     * Libera todos os suspensos (RN12). Não mexe em partidas, cartões nem contribuições:
+     * os cartões antigos ficam no histórico e só os da temporada vigente contam.
      */
     @Transactional
     public Temporada virarTemporada() {
@@ -183,12 +192,28 @@ public class TemporadaService {
 
         repository.inserirVigenteComIdIgualAoAno(anoNovo);
 
+        int liberados = jogadorRepository.liberarTodosSuspensos();
+        log.info("Virada para {}: {} jogador(es) suspenso(s) liberado(s).", anoNovo, liberados);
+
         return repository.findById(anoNovo)
                 .orElseThrow(() -> new IllegalStateException("Temporada " + anoNovo + " não encontrada após a virada."));
     }
 
     private long contribuicoesPendentes(int ano) {
-        return contribuicaoRepository.countByAnoAndPago(ano, 0);
+        return contribuicaoRepository.contarPendentesVencidas(ano, ultimoMesVencido(ano, LocalDate.now(relogio)));
+    }
+
+    /**
+     * Último mês já vencido do ano (0 = nenhum). O mês atual só vence a partir do dia 11.
+     */
+    static int ultimoMesVencido(int ano, LocalDate hoje) {
+        if (ano < hoje.getYear()) {
+            return 12;
+        }
+        if (ano > hoje.getYear()) {
+            return 0;
+        }
+        return hoje.getDayOfMonth() > DIA_VENCIMENTO ? hoje.getMonthValue() : hoje.getMonthValue() - 1;
     }
 
     private int anoCorrente() {
